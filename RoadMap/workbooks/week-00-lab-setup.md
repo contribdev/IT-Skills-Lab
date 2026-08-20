@@ -69,6 +69,79 @@ New-NetNat -Name "k8s-lab-nat" -InternalIPInterfaceAddressPrefix 192.168.100.0/2
 | node-1 | 192.168.100.12 | k3s agent |
 | node-2 | 192.168.100.13 | k3s agent |
 
+Команды для проверки 
+
+Get-VMSwitch -Name k8s-lab
+
+Name    SwitchType NetAdapterInterfaceDescription
+----    ---------- ------------------------------
+k8s-lab Internal
+
+
+Get-NetIPAddress -InterfaceAlias "vEthernet (k8s-lab)" -AddressFamily IPv4
+
+
+IPAddress         : 192.168.100.1
+InterfaceIndex    : 11
+InterfaceAlias    : vEthernet (k8s-lab)
+AddressFamily     : IPv4
+Type              : Unicast
+PrefixLength      : 24
+PrefixOrigin      : Manual
+SuffixOrigin      : Manual
+AddressState      : Preferred
+ValidLifetime     : Infinite ([TimeSpan]::MaxValue)
+PreferredLifetime : Infinite ([TimeSpan]::MaxValue)
+SkipAsSource      : False
+PolicyStore       : ActiveStore
+
+
+Get-NetNat
+
+Name                             : k8s-lab-nat
+ExternalIPInterfaceAddressPrefix :
+InternalIPInterfaceAddressPrefix : 192.168.100.0/24
+IcmpQueryTimeout                 : 30
+TcpEstablishedConnectionTimeout  : 1800
+TcpTransientConnectionTimeout    : 120
+TcpFilteringBehavior             : AddressDependentFiltering
+UdpFilteringBehavior             : AddressDependentFiltering
+UdpIdleSessionTimeout            : 120
+UdpInboundRefresh                : False
+Store                            : Local
+Active                           : True
+
+
+Get-NetIPInterface -InterfaceAlias "vEthernet (k8s-lab)" -AddressFamily IPv4 | Select Forwarding
+
+Forwarding
+----------
+   Enabled
+
+
+Get-NetConnectionProfile -InterfaceAlias "vEthernet (k8s-lab)"
+
+Name                     : Unidentified network
+InterfaceAlias           : vEthernet (k8s-lab)
+InterfaceIndex           : 11
+NetworkCategory          : Private
+DomainAuthenticationKind : None
+IPv4Connectivity         : NoTraffic
+IPv6Connectivity         : NoTraffic
+
+При настройке сети потребовалось включить форвардинг на всех необходимых интерфейсах, в моем случае и на k8s-lab, и на wsl
+
+Get-NetIPInterface -AddressFamily IPv4 | Where-Object InterfaceAlias -like "vEthernet*" | Select InterfaceAlias, Forwarding
+
+InterfaceAlias             Forwarding
+--------------             ----------
+vEthernet (k8s-lab)           Enabled
+vEthernet (WSL)               Enabled
+vEthernet (Default Switch)   Disabled
+
+В таком случае будет полный доступ к узлу
+
+Также потребовалось включить icmp на хосте для пинга вм
 
 ## Создание ВМ
 
@@ -76,6 +149,15 @@ New-VM -Name "cp-1" -MemoryStartupBytes 4GB -Generation 2 -NewVHDPath "D:\HyperV
 
 Set-VM -Name "cp-1" -ProcessorCount 2 -StaticMemory
 Set-VMFirmware -VMName "cp-1" -EnableSecureBoot Off      # важно для Ubuntu
-Add-VMDvdDrive -VMName "cp-1" -Path "D:\iso\ubuntu-26.04-live-server-amd64.iso"
+Add-VMDvdDrive -VMName "cp-1" -Path "D:\images\ubuntu-24.04.4-live-server-amd64.iso"
+
+Настроил сеть руками на вм при установке ОС
+
+subnet 192.168.100.0/24
+Address 192.168.100.11
+Gateway 192.168.100.1
+servers 8.8.8.8, 1.1.1.1
+
+
 
 
