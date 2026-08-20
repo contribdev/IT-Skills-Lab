@@ -70,4 +70,12 @@ New-NetNat -Name "k8s-lab-nat" -InternalIPInterfaceAddressPrefix 192.168.100.0/2
 | node-2 | 192.168.100.13 | k3s agent |
 
 
+## Создание ВМ
+
+New-VM -Name "cp-1" -MemoryStartupBytes 4GB -Generation 2 -NewVHDPath "D:\HyperV\cp-1.vhdx" -NewVHDSizeBytes 40GB -SwitchName "k8s-lab"
+
+Set-VM -Name "cp-1" -ProcessorCount 2 -StaticMemory
+Set-VMFirmware -VMName "cp-1" -EnableSecureBoot Off      # важно для Ubuntu
+Add-VMDvdDrive -VMName "cp-1" -Path "D:\iso\ubuntu-26.04-live-server-amd64.iso"
+
 
