@@ -1,17 +1,41 @@
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
+  creationTimestamp: "2026-09-17T14:53:38Z"
+  generation: 1
   labels:
-    run: nginx
-    somelabel: hz
-  name: nginx
+    app: 2-nginx
+  name: 2-nginx
+  namespace: default
+  resourceVersion: "116341"
+  uid: 1339596a-0291-44af-b2b9-9d262c32169a
 spec:
-  containers:
-  - image: nginx:1.27.0
-    name: nginx
-    ports:
-    - containerPort: 80
-    resources: {}
-  dnsPolicy: ClusterFirst
-  restartPolicy: Never
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: 2-nginx
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: 2-nginx
+    spec:
+      containers:
+      - image: nginx:1.26.0
+        imagePullPolicy: IfNotPresent
+        name: nginx
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
 status: {}

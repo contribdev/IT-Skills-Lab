@@ -1,6 +1,29 @@
 Описать основные сущности
 
+cp
+
+node
+
+pod
+
+ReplicaSet
+
+hpa - это Horizontal Pod Autoscaler, отдельный объект Kubernetes, который автоматически меняет количество реплик в Deployment'е в зависимости от нагрузки (CPU, память, кастомные метрики).
+
+deployments
+
+Namespace
+
+Services
+
+
+
 Описать работу kubectl apply
+
+
+Pods
+
+Pod - минимальная единица развертывания в k8s
 
 Создание подов
 для быстрого создания пода можно использовать императивную команду 
@@ -53,6 +76,70 @@ Forwarding from [::1]:7788 -> 80
 ![alt text](pict\welcome_to_nginx.png)
 
 При указании containerPort важно понимать, что необходимо указывать порт, который реально слушается приложением, иначе порт форвард разоврвется
+
+
+Deployments
+
+Deployment - обеспечивает создание ReplicaSet и обновление в них подов
+
+Создание Deployment
+kubectl create deployment my-postgres --image postgres:latest
+
+Скейлинг - расширение подов
+
+kubectl scale deployment nginx-deployments --replicas 3
+deployment.apps/nginx-deployments scaled
+cheaster@DESKTOP-BIHDH0E:/mnt/c/Users/Dmitry/Desktop/projects/IT-Skills-Lab$ kubectl get deploy
+NAME                READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployments   3/3     3            3           4m16s
+cheaster@DESKTOP-BIHDH0E:/mnt/c/Users/Dmitry/Desktop/projects/IT-Skills-Lab$ kubectl get pods
+NAME                               READY   STATUS    RESTARTS   AGE
+nginx-deployments-5ccf7dc5-5qtcx   1/1     Running   0          59s
+nginx-deployments-5ccf7dc5-cwj5n   1/1     Running   0          59s
+nginx-deployments-5ccf7dc5-svc4q   1/1     Running   0          5m2s
+
+При создании Deployments автоматически создается ReplicaSet
+
+cheaster@DESKTOP-BIHDH0E:/mnt/c/Users/Dmitry/Desktop/projects/IT-Skills-Lab$ kubectl get rs
+NAME                         DESIRED   CURRENT   READY   AGE
+nginx-deployments-5ccf7dc5   3         3         3       6m14s
+
+Если убить один под, то replicaset создаст новый
+
+cheaster@DESKTOP-BIHDH0E:/mnt/c/Users/Dmitry/Desktop/projects/IT-Skills-Lab$ kubectl delete pods nginx-deployments-5ccf7dc5-svc4q
+pod "nginx-deployments-5ccf7dc5-svc4q" deleted from default namespace
+cheaster@DESKTOP-BIHDH0E:/mnt/c/Users/Dmitry/Desktop/projects/IT-Skills-Lab$ kubectl get pods
+NAME                               READY   STATUS    RESTARTS   AGE
+nginx-deployments-5ccf7dc5-5qtcx   1/1     Running   0          2m51s
+nginx-deployments-5ccf7dc5-cwj5n   1/1     Running   0          2m51s
+nginx-deployments-5ccf7dc5-gc2fb   1/1     Running   0          3s
+
+Команда autoscale создает сущность hpa
+
+Процесс изменения Deployment
+В процессе будет изменен контейнер, поэтому необходимо получить его имя (nginx)
+
+cheaster@DESKTOP-BIHDH0E:/mnt/c/Users/Dmitry/Desktop/projects/IT-Skills-Lab$ kubectl set image deployments nginx-deployments nginx=nginx:1.26.0
+deployment.apps/nginx-deployments image updated
+
+cheaster@DESKTOP-BIHDH0E:/mnt/c/Users/Dmitry/Desktop/projects/IT-Skills-Lab$ kubectl rollout status deployment nginx-deployments 
+Waiting for deployment "nginx-deployments" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "nginx-deployments" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "nginx-deployments" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "nginx-deployments" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "nginx-deployments" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "nginx-deployments" rollout to finish: 1 old replicas are pending termination...
+deployment "nginx-deployments" successfully rolled out
+
+Вернуться на определенную версию Deployment 
+cheaster@DESKTOP-BIHDH0E:/mnt/c/Users/Dmitry/Desktop/projects/IT-Skills-Lab$ kubectl rollout undo deployment nginx-deployments --to-revision=3
+
+#TODO
+Дописать минимальный декларативный шаблон манифеста для Deployment
+Описать структуру
+
+
+
 
 
 
