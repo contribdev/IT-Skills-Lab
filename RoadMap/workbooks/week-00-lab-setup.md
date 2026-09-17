@@ -131,7 +131,11 @@ IPv6Connectivity         : NoTraffic
 
 При настройке сети потребовалось включить форвардинг на всех необходимых интерфейсах, в моем случае и на k8s-lab, и на wsl
 
+форвардинг может отключаться при перезагрузке wsl
+
 Get-NetIPInterface -AddressFamily IPv4 | Where-Object InterfaceAlias -like "vEthernet*" | Select InterfaceAlias, Forwarding
+
+Set-NetIPInterface -InterfaceAlias "vEthernet (WSL)" -Forwarding Enabled
 
 InterfaceAlias             Forwarding
 --------------             ----------
@@ -157,6 +161,25 @@ subnet 192.168.100.0/24
 Address 192.168.100.11
 Gateway 192.168.100.1
 servers 8.8.8.8, 1.1.1.1
+
+Установка k3s
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode 644 \
+  --disable traefik --node-name cp-1 \
+  --tls-san 192.168.100.11" sh -
+
+
+Установка агентов на ноды
+curl -sfL https://get.k3s.io | K3S_URL=https://192.168.100.11:6443 \
+  K3S_TOKEN="токен" INSTALL_K3S_EXEC="--node-name node-1" sh -
+
+Далее скопировал кубер-конфиг и подминил в нем локалхост на адрес cp-1
+
+
+Работа будет осуществляться с wsl
+Необходимо настроить и на нем рабочее окружение
+
+
+
 
 
 

@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    somelabel: red
+  name: app-both
+spec:
+  containers:
+  - image: nginx:1.27.0
+    name: web-server
+    ports:
+    - containerPort: 80
+
+  - image: tomcat:8.5.38
+    name: web-api
+    ports:
+    - containerPort: 8080
+
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never
+status: {}

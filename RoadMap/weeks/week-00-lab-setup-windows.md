@@ -290,12 +290,11 @@ Ubuntu Server 24.04 LTS, ISO для amd64.
 **Обязательно: поколение 2** (UEFI, современный вариант).
 
 ```powershell
-New-VM -Name "cp-1" -MemoryStartupBytes 4GB -Generation 2 `
-  -NewVHDPath "D:\HyperV\cp-1.vhdx" -NewVHDSizeBytes 40GB -SwitchName "k8s-lab"
+New-VM -Name "cp-1" -MemoryStartupBytes 4GB -Generation 2 -NewVHDPath "D:\HyperV\cp-1.vhdx" -NewVHDSizeBytes 40GB -SwitchName "k8s-lab"
 
 Set-VM -Name "cp-1" -ProcessorCount 2 -StaticMemory
 Set-VMFirmware -VMName "cp-1" -EnableSecureBoot Off      # важно для Ubuntu
-Add-VMDvdDrive -VMName "cp-1" -Path "D:\iso\ubuntu-24.04-live-server-amd64.iso"
+Add-VMDvdDrive -VMName "cp-1" -Path "D:\images\ubuntu-24.04-live-server-amd64.iso"
 ```
 
 ⚠️ **`-StaticMemory` — важно.** Динамическая память Hyper-V «раздувает» и «сдувает» объём на лету, а kubelet определяет доступную память при старте и считает её постоянной. С динамической памятью ты получишь неверный `Allocatable`, странные вытеснения подов и невоспроизводимые эксперименты с ресурсами (недели 3 и 7). Для лаборатории по Kubernetes память должна быть статической.
@@ -369,7 +368,7 @@ sudo netplan apply
 Stop-VM -Name "cp-1"
 Export-VM -Name "cp-1" -Path "D:\HyperV\export"
 
-Import-VM -Path "D:\HyperV\export\cp-1\Virtual Machines\<GUID>.vmcx" `
+Import-VM -Path "D:\HyperV\export\cp-1\Virtual Machines\2F79D17B-1A7D-42F4-97E2-A31453CFF4ED.vmcx" `
   -Copy -GenerateNewId -VirtualMachinePath "D:\HyperV\node-1" `
   -VhdDestinationPath "D:\HyperV\node-1"
 # повторить для node-2, затем переименовать через Rename-VM
@@ -542,19 +541,19 @@ export now="--force --grace-period=0"
 - [x] Аппаратная виртуализация включена в BIOS
 - [x] WSL2 установлен, ресурсы ограничены через `.wslconfig`
 - [x] Windows Terminal с профилем Ubuntu — рабочее место по умолчанию
-- [ ] Виртуальный коммутатор создан (External или Internal + NAT), адресация зафиксирована
-- [ ] Из WSL2 пингуются адреса нод
-- [ ] Три ВМ: статическая память, Secure Boot отключён, swap выключен, sysctl настроен
-- [ ] У каждой ВМ уникальные hostname, `machine-id` и статический IP
-- [ ] Контрольные точки сделаны **на выключенных** ВМ
-- [ ] k3s-кластер: `kubectl get nodes` из WSL2 показывает 3 ноды `Ready`
-- [ ] Traefik отключён, ноды помечены лейблами
-- [ ] kubectl, helm, k9s, автодополнение, алиасы, kube-ps1 настроены в WSL2
-- [ ] Антивирус: папка с VHDX в исключениях
-- [ ] Сон и гибернация хоста отключены
-- [ ] Публичный репозиторий `devops-lab` создан, структура папок закоммичена
-- [ ] `docs/lab.md` со схемой и таблицей адресов
-- [ ] `notes/week-00.md` заполнен, включая раздел «Ломаем специально»
+- [x] Виртуальный коммутатор создан (External или Internal + NAT), адресация зафиксирована
+- [x] Из WSL2 пингуются адреса нод
+- [x] Три ВМ: статическая память, Secure Boot отключён, swap выключен, sysctl настроен
+- [x] У каждой ВМ уникальные hostname, `machine-id` и статический IP
+- [x] Контрольные точки сделаны **на выключенных** ВМ
+- [x] k3s-кластер: `kubectl get nodes` из WSL2 показывает 3 ноды `Ready`
+- [x] Traefik отключён, ноды помечены лейблами
+- [x] kubectl, helm, k9s, автодополнение, алиасы, kube-ps1 настроены в WSL2
+- [x] Антивирус: папка с VHDX в исключениях
+- [x] Сон и гибернация хоста отключены
+- [x] Публичный репозиторий `devops-lab` создан, структура папок закоммичена
+- [x] `docs/lab.md` со схемой и таблицей адресов
+- [x] `notes/week-00.md` заполнен, включая раздел «Ломаем специально»
 
 ---
 
