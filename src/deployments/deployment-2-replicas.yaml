@@ -1,20 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-web-app
+  name: my-web-deployment-replicas
   labels:
     app: my-k8s-web-app
+    env: my-var
+    owner: cheaster
 spec:
+  replicas: 3
   selector:
     matchLabels:
-      project: kgb
+      project: cia
   template:
     metadata:
       labels:
-        project: kgb
+        project: cia
     spec:
       containers:
-        - name: kgb-web
+        - name: cia-web
           image: nginx:latest
           ports:
             - containerPort: 80
