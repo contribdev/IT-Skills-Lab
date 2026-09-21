@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: x-man-app-multipod
+  labels:
+    app: x-man-k8s-web-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      project: x-man
+  template:
+    metadata:
+      labels:
+        project: x-man
+    spec:
+      containers:
+        - name: x-man-web
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+        - name: x-man-cat
+          image: tomcat:8.5.38
+          ports:
+          - containerPort: 8080
+
+---
+apiVersion: v1 
+kind: Service 
+metadata:
+  name: my-service-2-lb-multi
+  labels:
+    env: test
+    owner: cheaster
+spec:
+  selector:
+    project: x-man # select pods with those labels
+  ports: 
+    - name: x-man-web-listener
+      protocol: TCP
+      port: 80 #on LoadBalancer
+      targetPort: 80 #on pod
+
+    - name: x-man-cat-listener
+      protocol: TCP
+      port: 8888 #on LoadBalancer
+      targetPort: 8080 #on pod  
+  type: LoadBalancer

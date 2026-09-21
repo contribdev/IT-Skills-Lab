@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: avengers-app-deployment-autoscaling
+  labels:
+    app: avengers-k8s-web-app
+spec:
+  selector:
+    matchLabels:
+      project: avengers
+  template:
+    metadata:
+      labels:
+        project: avengers
+    spec:
+      containers:
+        - name: avengers-web
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+        - name: avengers-cat
+          image: tomcat:8.5.38
+          ports:
+          - containerPort: 8080
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: avengers-autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: avengers-app-deployment-autoscaling
+  minReplicas: 5
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+apiVersion: v1 
+kind: Service 
+metadata:
+  name: avengers-service-3-autoscaling
+  labels:
+    env: test
+    owner: cheaster
+spec:
+  selector:
+    project: avengers # select pods with those labels
+  ports: 
+    - name: avengers-web-listener
+      protocol: TCP
+      port: 80 #on LoadBalancer
+      targetPort: 80 #on pod
+
+    - name: avengers-cat-listener
+      protocol: TCP
+      port: 8888 #on LoadBalancer
+      targetPort: 8080 #on pod  
+  type: LoadBalancer        
