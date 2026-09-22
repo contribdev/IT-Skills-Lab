@@ -1,0 +1,24 @@
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: x-man-proxy
+spec:
+  virtualhost:
+    fqdn: x-man.local
+  routes:
+    - conditions:
+      - prefix: /tomcat
+      services:
+      - name: x-man-tomcat
+        port: 8080
+      pathRewritePolicy:
+        replacePrefix:
+        - replacement: /
+    - conditions:
+      - prefix: /nginx
+      services:
+      - name: x-man-nginx
+        port: 80
+      pathRewritePolicy:
+        replacePrefix:
+        - replacement: /

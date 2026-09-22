@@ -1,0 +1,72 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-hosts
+
+spec:
+  rules:
+  - host: avengers-nginx.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: avengers-nginx
+            port:
+              number: 80
+
+  - host: avengers-tomcat.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: avengers-tomcat
+            port:
+              number: 8080
+  
+  - host: gambit-apache.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: gambit-apache
+            port:
+              number: 80
+
+  - host: spidy-apache.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: spidy-apache
+            port:
+              number: 80
+
+  - host: x-man-nginx.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: x-man-nginx
+            port:
+              number: 80
+
+  - host: x-man-tomcat.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: x-man-tomcat
+            port:
+              number: 8080
