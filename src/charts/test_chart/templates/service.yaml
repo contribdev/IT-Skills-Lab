@@ -1,0 +1,17 @@
+apiVersion: v1 
+kind: Service 
+metadata:
+  name: {{ .Release.Name}}-service
+  labels:
+    env: test
+    owner: cheaster
+    project: spidy-app-deployment
+spec:
+  selector:
+    project: {{ .Release.Name}}-deployment # select pods with those labels
+  ports: 
+    - name: {{ .Release.Name}}-listener
+      protocol: TCP
+      port: 9999 #on LoadBalancer
+      targetPort: 80 #on pod
+  type: LoadBalancer
