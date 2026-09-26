@@ -135,7 +135,6 @@ IPv6Connectivity         : NoTraffic
 
 Get-NetIPInterface -AddressFamily IPv4 | Where-Object InterfaceAlias -like "vEthernet*" | Select InterfaceAlias, Forwarding
 
-Set-NetIPInterface -InterfaceAlias "vEthernet (WSL)" -Forwarding Enabled
 
 InterfaceAlias             Forwarding
 --------------             ----------

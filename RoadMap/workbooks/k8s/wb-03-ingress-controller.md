@@ -312,7 +312,7 @@ http://x-man.local/nginx - успешно работает
 
 http://x-man.local/tomcat - возвращает 404
 
-![Tomcat error](pict\tomcat_error_404.png)
+![Tomcat error](..\pict\tomcat_error_404.png)
 
 Открыл форвардинг на админку envoy
 kubectl port-forward -n projectcontour contour-envoy-5l4jm 9001:9001
@@ -341,5 +341,5 @@ Envoy знает все маршруты, rewrite настроен коррек�
 
 Значит, 404 отдаёт сам Tomcat. Проблема заключалась в версии томката, старая версия работает из корня, новые не. Пересоздал Deployment с нужным образом.
 
-![](pict/x_man_tomcat.png)
+![](..\pict/x_man_tomcat.png)
 

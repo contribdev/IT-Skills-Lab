@@ -125,7 +125,7 @@ kubectl port-forward nginx 7788:80
 Forwarding from 127.0.0.1:7788 -> 80
 Forwarding from [::1]:7788 -> 80
 
-![alt text](pict\welcome_to_nginx.png)
+![alt text](..\pict\welcome_to_nginx.png)
 
 При указании containerPort важно понимать, что необходимо указывать порт, который реально слушается приложением, иначе порт форвард разоврвется
 
