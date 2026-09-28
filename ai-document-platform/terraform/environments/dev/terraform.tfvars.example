@@ -1,0 +1,9 @@
+kube_context = "default"
+
+environment  = "dev"
+project_name = "ai-document-platform"
+
+minio_root_user     = "admin"
+minio_root_password = "CHANGE_ME_minio_password"
+minio_storage_size  = "10Gi"
+minio_bucket_name   = "documents"
