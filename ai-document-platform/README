@@ -11,6 +11,41 @@
     
 - [ ] Этап 1. Terraform: инфраструктура
     
+1.    Разработка модуля STORAGE. Модуль должен создавать пространство имен, secret и производить установку и конфигурирование minio
+    (https://github.com/minio/minio/tree/master/helm/minio)
+
+Реализован модуль terraform/modules/storage:
+    -namespace storage
+    -Secret minio-credentials (стандартные ключи access-key / secret-key)
+    -Helm release MinIO (Bitnami chart)
+    -outputs в модуле и в environments/dev
+    -Функциональная проверка через rclone — успешно.
+
+Проблема: официальные образы minio/minio (Docker Hub) удалены из публичного доступа. Community-сборки (netvark/minio) несовместимы с официальным Helm-чартом — /usr/bin/docker-entrypoint.sh: not found.
+
+Решение: перейти на Bitnami MinIO chart (oci://registry-1.docker.io/bitnamicharts), но и там основные теги исчезли. Использовать образы из bitnamilegacy:
+set { name = "image.repository"; value = "bitnamilegacy/minio" }
+set { name = "image.tag";        value = "2025.7.23-debian-12-r5" }
+
+Для проверки функциональности использовал rclone
+Настройка:
+rclone config create local s3 \
+  provider=Minio \
+  endpoint=http://localhost:9000 \
+  access_key_id=admin \
+  secret_access_key=ПАРОЛЬ
+
+Основные команды:
+rclone lsd local:	                          Список бакетов
+rclone ls local:documents	                  Список файлов в бакете
+rclone copy file.txt local:documents/	      Загрузить файл
+rclone copy local:documents/file.txt /tmp/	  Скачать файл
+rclone delete local:documents/file.txt	      Удалить файл
+rclone mkdir local:newbucket	              Создать бакет
+rclone purge local:newbucket	              Удалить бакет со всем содержимым
+rclone config show local	                  Показать настройки
+
+
 
 - [ ] Этап 2. Базовые сервисы
 - [ ] Этап 3. Приложения

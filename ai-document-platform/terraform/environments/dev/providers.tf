@@ -4,7 +4,7 @@ provider "kubernetes" {
 }
 
 provider "helm" {
-  kubernetes = {
+  kubernetes {
     config_path    = pathexpand("~/.kube/config-lab")
     config_context = var.kube_context
   }
