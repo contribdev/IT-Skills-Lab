@@ -45,3 +45,30 @@ variable "minio_bucket_name" {
   type        = string
   default     = "documents"
 }
+
+# PostgreSQL
+
+variable "db_name" {
+  type    = string
+  default = "documents"
+}
+
+variable "db_user" {
+  type    = string
+  default = "app"
+}
+
+variable "db_password" {
+  type      = string
+  sensitive = true
+}
+
+variable "db_instances" {
+  type    = number
+  default = 2
+}
+
+variable "db_storage_size" {
+  type    = string
+  default = "10Gi"
+}

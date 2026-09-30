@@ -7,3 +7,7 @@ minio_root_user     = "admin"
 minio_root_password = "CHANGE_ME_minio_password"
 minio_storage_size  = "10Gi"
 minio_bucket_name   = "documents"
+
+db_password = "postgres_password"
+db_instances    = 2
+db_storage_size = "10Gi"

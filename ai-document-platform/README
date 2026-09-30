@@ -45,6 +45,68 @@ rclone mkdir local:newbucket	              Создать бакет
 rclone purge local:newbucket	              Удалить бакет со всем содержимым
 rclone config show local	                  Показать настройки
 
+2. Разработка модуля DATABASE
+Для управления ресурсами postgresql использую CloudNativePG (CNPG)
+
+CloudNativePG — самый популярный PostgreSQL-operator. Что он даёт:
+
+Функция	           Что делает
+Репликация	       Настраивает streaming replication между instances
+Failover	       При падении primary — повышает replica до primary
+Service	           Создаёт -rw, -ro, -r сервисы (read-write, read-only, any)
+Bootstrap	       Инициализирует БД, пользователей, пароли
+Backup	           Автоматические бэкапы в S3
+Мониторинг	       Экспортирует метрики для Prometheus
+
+CRD (Custom Resource Definition) — расширение Kubernetes. Ты добавляешь новый тип ресурса.
+
+CR (Custom Resource) — экземпляр этого типа. Как Pod — экземпляр Deployment.
+
+Работа с Операторами
+1) Установка оператора (как обычный чарт)
+2) Ожидание готовности CRD - иначе CR не создастся.
+3) Создать CR — через kubernetes_manifest
+
+Реализован модуль `terraform/modules/database`:
+- namespace `cnpg-system` (для operator)
+- namespace `database` (для PostgreSQL)
+- Helm release CNPG operator
+- Secret `postgres-app-credentials`
+- CR `Cluster` через `kubectl_manifest`
+- outputs в модуле и в окружении
+
+Столкнулся с проблемами:
+1) При применении terraform plan получил ошибку
+API did not recognize GroupVersionKind from manifest (CRD may not be installed)
+
+Разделю apply на две части: сначала закомментирую ресурс manifest, запущу только установку crd, потом повторно запущу apply раскомментировав manifest1
+
+2) `kubernetes_manifest` не умеет работать с CR от operator'ов. CNPG дописывает дефолтные параметры PostgreSQL (`wal_level`, `archive_mode`, etc.), Terraform видит «новые элементы» — падает.
+
+3) Terraform искал `hashicorp/kubectl`, но такого провайдера нет. Community-провайдер — `gavinbunney/kubectl`.  модуле `database` не было `versions.tf`. Terraform сам подставлял `hashicorp/` по имени ресурса `kubectl_manifest`.
+
+Database cluster — это набор баз данных, управляемых одним экземпляром серверного процесса PostgreSQL.
+Cluster — это custom resource, который описывает желаемое состояние PostgreSQL-кластера: количество инстансов, ресурсы, параметры, стратегию backup.
+
+Один CNPG Cluster создаёт несколько классических PostgreSQL-кластеров — по одному на каждый instance.
+CNPG Cluster (один YAML-объект в Kubernetes)
+│
+├── Pod postgres-1 (primary)
+│   └── PostgreSQL Cluster (классический)
+│       ├── /var/lib/postgresql/data (PVC 10Gi)
+│       ├── база: documents
+│       ├── база: postgres
+│       ├── база: template0, template1
+│       └── роли: postgres, app
+│
+└── Pod postgres-2 (replica)
+    └── PostgreSQL Cluster (классический)
+        ├── /var/lib/postgresql/data (PVC 10Gi)
+        ├── база: documents   ← копия с primary
+        ├── база: postgres
+        ├── база: template0, template1
+        └── роли: postgres, app
+Каждый pod — самостоятельный PostgreSQL-сервер со своим классическим кластером. Replica копирует данные с primary через streaming replication.
 
 
 - [ ] Этап 2. Базовые сервисы
