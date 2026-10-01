@@ -9,7 +9,7 @@
     Установка k9s, terraform, установка локальной LLM - модель llama3.1:8b
     Фиксация первичной архитектуры
     
-- [ ] Этап 1. Terraform: инфраструктура
+- [x] Этап 1. Terraform: инфраструктура
     
 1.    Разработка модуля STORAGE. Модуль должен создавать пространство имен, secret и производить установку и конфигурирование minio
     (https://github.com/minio/minio/tree/master/helm/minio)
@@ -108,6 +108,30 @@ CNPG Cluster (один YAML-объект в Kubernetes)
         └── роли: postgres, app
 Каждый pod — самостоятельный PostgreSQL-сервер со своим классическим кластером. Replica копирует данные с primary через streaming replication.
 
+3. Разработка модуля queue:
+-namespace queue
+-Secret rabbitmq-credentials с готовыми amqp-url и management-url
+-Helm release RabbitMQ (Bitnami chart) с Management plugin
+-ConfigMap rabbitmq-create-queues-script со скриптом создания очередей
+-Kubernetes Job rabbitmq-create-queues — создаёт очереди через Management API
+-outputs в модуле и в окружении
+
+Terraform
+  │
+  ├── kubernetes_namespace "queue"
+  ├── kubernetes_secret "credentials"
+  ├── helm_release "rabbitmq"          → RabbitMQ pod
+  ├── kubernetes_config_map "script"   → скрипт
+  └── kubernetes_job "create_queues"   → Job (зависит от helm_release)
+        │
+        └── Job pod
+             ├── ждёт готовности Management API
+             ├── PUT /api/queues/%2F/ocr.queue
+             ├── PUT /api/queues/%2F/llm.queue
+
+Management plugin — расширение RabbitMQ, которое добавляет HTTP API и веб-интерфейс для управления брокером. Без него RabbitMQ работает, но управлять можно только через AMQP-протокол или CLI rabbitmqctl.
+
+Erlang cookie — секретная строка, которая используется для аутентификации между нодами Erlang. Все ноды кластера RabbitMQ должны иметь одинаковый cookie.
 
 - [ ] Этап 2. Базовые сервисы
 - [ ] Этап 3. Приложения

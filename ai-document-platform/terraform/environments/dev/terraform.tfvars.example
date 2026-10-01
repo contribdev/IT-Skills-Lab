@@ -11,3 +11,5 @@ minio_bucket_name   = "documents"
 db_password = "postgres_password"
 db_instances    = 2
 db_storage_size = "10Gi"
+
+rabbitmq_password = "rabbitmq_password"

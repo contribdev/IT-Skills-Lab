@@ -11,6 +11,6 @@ provider "helm" {
 }
 
 provider "kubectl" {
-  config_path      = pathexpand("~/.kube/config-lab")
-  config_context   = var.kube_context
+  config_path    = pathexpand("~/.kube/config-lab")
+  config_context = var.kube_context
 }

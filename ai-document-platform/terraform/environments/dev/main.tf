@@ -17,3 +17,13 @@ module "database" {
   common_labels = local.common_labels
 }
 
+module "queue" {
+  source = "../../modules/queue"
+
+  namespace     = local.namespaces.queue
+  username      = var.rabbitmq_user
+  password      = var.rabbitmq_password
+  storage_size  = var.rabbitmq_storage_size
+  queues        = ["ocr.queue", "llm.queue"]
+  common_labels = local.common_labels
+}

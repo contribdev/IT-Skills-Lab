@@ -51,3 +51,46 @@ output "db_credentials_secret" {
   description = "Kubernetes Secret name for PostgreSQL credentials"
   value       = module.database.credentials_secret_name
 }
+
+output "queue_host" {
+  description = "RabbitMQ AMQP host"
+  value       = module.queue.host
+}
+
+output "queue_amqp_port" {
+  description = "AMQP port"
+  value       = module.queue.amqp_port
+}
+
+output "queue_management_port" {
+  description = "Management API port"
+  value       = module.queue.management_port
+}
+
+output "queue_amqp_url" {
+  description = "Ready-to-use AMQP URL"
+  value       = module.queue.amqp_url
+  sensitive   = true
+}
+
+output "queue_username" {
+  description = "RabbitMQ username"
+  value       = module.queue.username
+  sensitive   = true
+}
+
+output "queue_password" {
+  description = "RabbitMQ password"
+  value       = module.queue.password
+  sensitive   = true
+}
+
+output "queue_credentials_secret" {
+  description = "Kubernetes Secret name"
+  value       = module.queue.credentials_secret_name
+}
+
+output "queue_queues" {
+  description = "List of pre-created queues"
+  value       = module.queue.queues
+}

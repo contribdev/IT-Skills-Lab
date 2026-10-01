@@ -72,3 +72,20 @@ variable "db_storage_size" {
   type    = string
   default = "10Gi"
 }
+
+# RabbitMQ
+
+variable "rabbitmq_user" {
+  type    = string
+  default = "app"
+}
+
+variable "rabbitmq_password" {
+  type      = string
+  sensitive = true
+}
+
+variable "rabbitmq_storage_size" {
+  type    = string
+  default = "10Gi"
+}
