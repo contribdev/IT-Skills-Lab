@@ -22,3 +22,5 @@ override.tf.json
 !.env.example
 uv.lock
 troubleshooting/
+__init__.py
+__pycache__/
