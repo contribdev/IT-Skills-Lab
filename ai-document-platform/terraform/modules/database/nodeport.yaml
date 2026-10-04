@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-nodeport
+  namespace: database
+  labels:
+    app: postgres
+    cnpg.io/cluster: postgres
+spec:
+  type: NodePort
+  selector:
+    cnpg.io/cluster: postgres
+    role: primary
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      nodePort: 30432
+      protocol: TCP

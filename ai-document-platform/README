@@ -138,8 +138,8 @@ MinIO, PostgreSQL, RabbitMQ в кластере
 
 - [~] Этап 3. Приложения
       [x] API: config, logging, db, s3, rabbit
-      [ ] API: models, routes, main, Dockerfile
-      [ ] OCR Worker
+      [x] API: models, routes, main, Dockerfile
+      [x] OCR Worker
       [ ] LLM Worker
       
 - [ ] Этап 4. Helm-чарты
