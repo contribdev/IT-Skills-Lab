@@ -24,3 +24,4 @@ uv.lock
 troubleshooting/
 __init__.py
 __pycache__/
+scripts/
