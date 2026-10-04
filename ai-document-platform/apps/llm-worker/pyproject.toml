@@ -1,0 +1,37 @@
+[project]
+name = "llm-worker"
+version = "0.1.0"
+description = "AI Document Intelligence Platform — LLM Worker"
+requires-python = ">=3.12"
+
+dependencies = [
+    # Database
+    "asyncpg>=0.30.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+
+    # S3
+    "aioboto3>=13.2.0",
+
+    # RabbitMQ
+    "aio-pika>=9.5.0",
+
+    # HTTP client for Ollama
+    "httpx>=0.27.0",
+
+    # Config & validation
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+
+    # Logging
+    "structlog>=24.4.0",
+
+    # Metrics
+    "prometheus-client>=0.21.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/llm_worker"]
