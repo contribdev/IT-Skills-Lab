@@ -136,11 +136,11 @@ Erlang cookie — секретная строка, которая использ
 - [x] Этап 2. Базовые сервисы
 MinIO, PostgreSQL, RabbitMQ в кластере
 
-- [~] Этап 3. Приложения
+- [x] Этап 3. Приложения
       [x] API: config, logging, db, s3, rabbit
       [x] API: models, routes, main, Dockerfile
       [x] OCR Worker
-      [ ] LLM Worker
+      [x] LLM Worker
       
 - [ ] Этап 4. Helm-чарты
 - [ ] Этап 5. Ingress и TLS
