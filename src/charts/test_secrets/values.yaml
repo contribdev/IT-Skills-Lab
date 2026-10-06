@@ -1,0 +1,9 @@
+image:
+  repository: ghcr.io/contribdev/ai-document-platform-api
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ghcr-secret
+
+replicaCount: 3

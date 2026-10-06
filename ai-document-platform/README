@@ -143,6 +143,119 @@ MinIO, PostgreSQL, RabbitMQ в кластере
       [x] LLM Worker
       
 - [ ] Этап 4. Helm-чарты
+Реализован Helm чарт для api
+Столкнулся со следующими проблемами и вопросами
+
+1. Почему port name http, а protocol TCP
+name: http — это логическое имя порта внутри Deployment. Kubernetes использует его как ссылку.
+protocol: TCP — транспортный протокол L4. HTTP — это прикладной протокол L7, работающий поверх TCP. Порт 8080 принимает HTTP-трафик, но с точки зрения Kubernetes это просто TCP-сокет.
+Kubernetes на уровне ports работает с L4 (транспортный уровень) — TCP/UDP/SCTP. Он не знает, что внутри TCP-соединения бежит HTTP. Для k8s порт 8080 — это просто «открытый TCP-сокет». HTTP — это уже содержимое этого сокета, которое понимает только само приложение и тот, кто с ним говорит.
+
+2. Сетевое взаимодействие компонентов
+Путь запроса API 
+API pod (10.42.1.5)
+  │
+  │ 1. getaddrinfo("postgres-rw.database.svc.cluster.local")
+  │    → /etc/resolv.conf → nameserver 10.43.0.10 (CoreDNS)
+  │
+  ▼
+CoreDNS (10.43.0.10)
+  │ 2. Резолвит Service postgres-rw в namespace database
+  │    → возвращает ClusterIP 10.43.200.10
+  │
+  ▼
+API pod (10.42.1.5)
+  │ 3. TCP connect к 10.43.200.10:5432
+  │
+  ▼
+kube-proxy на ноде (iptables/IPVS)
+  │ 4. Правило: 10.43.200.10:5432 → 10.42.2.7:5432 (primary pod)
+  │
+  ▼
+PostgreSQL pod (10.42.2.7)
+  │ 5. Принимает соединение, SCRAM auth, SELECT 1
+  │
+  ▼
+Возврат ответа тем же путём (reverse NAT)
+
+3. как передаются креды
+слой 1 - в values.yaml лежит шаблон
+secrets:
+  DATABASE_URL: ""
+  RABBITMQ_URL: ""
+  S3_ACCESS_KEY: ""
+  S3_SECRET_KEY: ""
+Здесь видно, какие секреты нужны, но значений нет.
+
+слой 2 - передача при установке
+helm install api ./charts/api -n ai-doc-platform \
+  --set secrets.DATABASE_URL="postgresql+asyncpg://app:${DB_PASSWORD}@postgres-rw.database.svc.cluster.local:5432/documents" \
+  --set secrets.RABBITMQ_URL="amqp://app:${RMQ_PASSWORD}@rabbitmq.queue.svc.cluster.local:5672/" \
+  --set secrets.S3_ACCESS_KEY="${S3_ACCESS}" \
+  --set secrets.S3_SECRET_KEY="${S3_SECRET}"
+
+слой 3 - Рендер Secret в кластере.
+secret.yaml
+data:
+  {{- range $key, $value := .Values.secrets }}
+  {{- if $value }}
+  {{ $key }}: {{ $value | b64enc | quote }}
+  {{- end }}
+  {{- end }}
+
+слой 4 - передача в под
+Deployment использует:
+
+envFrom:
+  - configMapRef:
+      name: api
+  - secretRef:
+      name: api
+
+Слой 5 - Чтение в приложении.
+pydantic-settings читает DATABASE_URL из env и мапит в поле database_url
+
+4. Инструменты управления тем, на какую ноду попадает pod
+- nodeSelector - Самый простой. Жёсткий фильтр по меткам ноды.
+Pod запустится только на нодах, у которых все указанные метки. Если ни одной — pod в Pending.
+
+- tolerations - Про taints. Ноды могут иметь taints — метки «не ставь сюда поды без явного разрешения».
+Пример: у GPU-ноды taint gpu=true:NoSchedule — обычные поды туда не встают, чтобы не мешать. Pod, который хочет на GPU, объявляет toleration:
+tolerations:
+  - key: "gpu"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+Теперь этот pod может быть поставлен на GPU-ноду, остальные — нет.
+Когда: специальные ноды (GPU, control-plane, выделенные), которые должны принимать только определённые поды.
+
+- affinity
+Самый мощный. Три подвида:
+
+nodeAffinity — на какие ноды ставим (по меткам, с логикой In, NotIn, Exists, DoesNotExist). Жёсткий (requiredDuringScheduling) или мягкий (preferredDuringScheduling).
+
+podAffinity — ставить pod рядом с другими подами (по меткам). Например: «ставь на ноду, где уже есть pod с app=cache» — минимизация latency.
+
+podAntiAffinity — не ставить рядом. Классика — replicas одного Deployment раскинуть по разным нодам:
+
+5. Сущность ServiceAccount
+Идентификация пода (не человека) внутри кластера. 
+Три вещи вместе:
+- Объект в K8s — ServiceAccount в namespace.
+- Токен — JWT, автоматически смонтированный в под по пути /var/run/secrets/kubernetes.io/serviceaccount/token.
+- RBAC bindings — правила, что этой SA разрешено.
+
+SA + токен идентифицируют «кто я», RBAC решает «что мне можно».
+
+Зачем создавать свою SA:
+-Принцип наименьших привилегий — каждое приложение использует свою SA с минимальными правами.
+-Изоляция — компрометация одной SA не даёт прав другой.
+-IRSA (AWS) / Workload Identity (GCP) — привязка SA к cloud IAM-роли. Под берёт AWS credentials без хранения статических ключей.
+-External Secrets Operator — приложению нужна SA, чтобы читать K8s Secret, если ESO работает через SA.
+-Image pull secrets — можно повесить на SA, и все поды namespace автоматически получат доступ к приватному registry.
+
+В моем случае - SA api без ролей — используется только для идентификации. API не должен иметь доступ к K8s API.
+
 - [ ] Этап 5. Ingress и TLS
 - [ ] Этап 6. Секреты и политики
 - [ ] Этап 7. Observability

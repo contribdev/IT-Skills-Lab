@@ -1,0 +1,12 @@
+apiVersion: v2
+name: api
+description: AI Document Intelligence Platform — API Service
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ai
+  - document-intelligence
+  - api
+maintainers:
+  - name: contribdev

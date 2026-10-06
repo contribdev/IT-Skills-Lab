@@ -65,3 +65,10 @@ helm lint <chart>
 helm template <release> <chart> --debug
 helm install <release> <chart> --dry-run --debug
 helm get manifest <release>
+
+Практика:
+Упаковка своего приложения
+
+Полезная практика - использования _helpers.tpl
+_helpers.tpl — это DRY-слой Helm-чарта. Всё, что повторяется в 2+ шаблонах (метки, имена, селекторы, имена SA), выносится сюда.
+
