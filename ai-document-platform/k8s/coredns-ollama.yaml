@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap 
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  ollama.server: | 
+    ollama.local:53 {
+      hosts {
+        172.21.128.1 ollama.local
+        fallthrough
+      }
+    }

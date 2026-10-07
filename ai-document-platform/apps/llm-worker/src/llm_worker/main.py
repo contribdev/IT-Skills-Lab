@@ -2,7 +2,7 @@
 
 Consumes tasks from llm.queue, calls Ollama, validates the JSON output,
 stores it in S3 and updates the database. Exposes Prometheus metrics on
-:9090/metrics.
+:9091/metrics.
 """
 
 import asyncio

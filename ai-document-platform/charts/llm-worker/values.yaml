@@ -1,0 +1,56 @@
+image:
+  repository: ghcr.io/contribdev/ai-document-platform-llm-worker
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+config:
+  ENVIRONMENT: "prod"
+  LOG_LEVEL: "INFO"
+
+  S3_ENDPOINT: "http://minio.storage.svc.cluster.local:9000"
+  S3_BUCKET: "documents"
+  S3_REGION: "us-east-1"
+
+  OLLAMA_ENDPOINT: "http://ollama-external.ai-doc-platform.svc.cluster.local:11434"
+  OLLAMA_MODEL: "llama3.1:8b"
+  OLLAMA_TIMEOUT_SECONDS: "180"
+  OLLAMA_TEMPERATURE: "0.1"
+  OLLAMA_NUM_PREDICT: "2048"
+
+  MAX_TEXT_CHARS: "30000"
+
+  LLM_QUEUE: "llm.queue"
+  PREFETCH_COUNT: "1"
+  
+
+  DB_POOL_MIN_SIZE: "2"
+  DB_POOL_MAX_SIZE: "5"
+  DB_COMMAND_TIMEOUT: "60.0"
+
+secrets:
+  DATABASE_URL: ""
+  RABBITMQ_URL: ""
+  S3_ACCESS_KEY: ""
+  S3_SECRET_KEY: ""
+
+imagePullSecrets:
+  - name: ghcr-secret
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

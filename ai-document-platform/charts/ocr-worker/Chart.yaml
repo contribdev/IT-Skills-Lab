@@ -1,0 +1,12 @@
+apiVersion: v2
+name: ocr-worker
+description: AI Document Intelligence Platform — OCR Worker (Tesseract)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ai
+  - document-intelligence
+  - ocr-worker
+maintainers:
+  - name: contribdev

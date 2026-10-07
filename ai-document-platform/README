@@ -142,7 +142,7 @@ MinIO, PostgreSQL, RabbitMQ в кластере
       [x] OCR Worker
       [x] LLM Worker
       
-- [ ] Этап 4. Helm-чарты
+- [x] Этап 4. Helm-чарты
 Реализован Helm чарт для api
 Столкнулся со следующими проблемами и вопросами
 
@@ -255,6 +255,68 @@ SA + токен идентифицируют «кто я», RBAC решает «
 -Image pull secrets — можно повесить на SA, и все поды namespace автоматически получат доступ к приватному registry.
 
 В моем случае - SA api без ролей — используется только для идентификации. API не должен иметь доступ к K8s API.
+
+
+Деплой ocr-worker
+helm install ocr-worker ./charts/ocr-worker -n ai-doc-platform \
+    --set secrets.DATABASE_URL="postgresql+asyncpg://app:${DB_PASSWORD}@postgres-rw.database.svc.cluster.local:5432/documents" \
+    --set secrets.RABBITMQ_URL="amqp://app:${RMQ_PASSWORD}@rabbitmq.queue.svc.cluster.local:5672/" \
+    --set secrets.S3_ACCESS_KEY="${S3_ACCESS}" \
+    --set secrets.S3_SECRET_KEY="${S3_SECRET}"
+
+При запуске забыл обновить имя образа после копирования
+был передан образ апи сервиса
+для того чтобы обновить необходимо выполнить 
+
+helm upgrade ocr-worker ./charts/ocr-worker -n ai-doc-platform \
+    --set secrets.DATABASE_URL="postgresql+asyncpg://app:${DB_PASSWORD}@postgres-rw.database.svc.cluster.local:5432/documents" \
+    --set secrets.RABBITMQ_URL="amqp://app:${RMQ_PASSWORD}@rabbitmq.queue.svc.cluster.local:5672/" \
+    --set secrets.S3_ACCESS_KEY="${S3_ACCESS}" \
+    --set secrets.S3_SECRET_KEY="${S3_SECRET}"
+
+helm upgrade llm-worker ./charts/llm-worker -n ai-doc-platform \
+    --set secrets.DATABASE_URL="postgresql+asyncpg://app:${DB_PASSWORD}@postgres-rw.database.svc.cluster.local:5432/documents" \
+    --set secrets.RABBITMQ_URL="amqp://app:${RMQ_PASSWORD}@rabbitmq.queue.svc.cluster.local:5672/" \
+    --set secrets.S3_ACCESS_KEY="${S3_ACCESS}" \
+    --set secrets.S3_SECRET_KEY="${S3_SECRET}"   
+
+Доступ к ollama будет осуществляться с помощью ExternalName
+Создан соответствующий сервис 
+
+ollama-external   ExternalName   <none>         ollama.local   <none>     17s
+ExternalIP ollama.local
+
+ollama.local резолвится в win ip моей локальной машины
+
+CoreDNS — DNS-сервер, который поставляется вместе с Kubernetes и обслуживает все DNS-запросы внутри кластера. Это единственный DNS-сервер, к которому обращаются поды.
+
+1 слой. CoreDNS отвечает на ollama-external.ai-doc-platform.svc.cluster.local CNAME-записью ollama.local. Приложение видит CNAME и резолвит его заново — теперь через общий CoreDNS, не зная про Service.
+
+2 слой. CoreDNS override.
+data:
+  ollama.server: |
+    ollama.local:53 {
+      hosts {
+        172.21.128.1 ollama.local
+        fallthrough
+      }
+    }
+
+CoreDNS читает все ключи с суффиксом .server из coredns-custom и включает их как дополнительные server-блоки.** Зона ollama.local:53 обслуживается плагином hosts:** статический маппинг 172.21.128.1 ollama.local.
+
+Логика:
+Запрос nslookup ollama.local:
+-CoreDNS смотрит в свой Corefile.
+-Находит server-блок для зоны ollama.local.
+-Вызывает плагин hosts.
+-Плагин находит 172.21.128.1.
+-Отвечает: ollama.local → 172.21.128.1.
+
+53 — стандартный порт DNS
+
+Rollout — процесс замены старых подов на новые при изменении Deployment. Kubernetes делает это постепенно, не убивая все поды сразу, чтобы сервис оставался доступен.
+
+
 
 - [ ] Этап 5. Ingress и TLS
 - [ ] Этап 6. Секреты и политики

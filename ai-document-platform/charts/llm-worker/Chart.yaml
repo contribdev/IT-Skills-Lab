@@ -1,0 +1,12 @@
+apiVersion: v2
+name: llm-worker
+description: AI Document Intelligence Platform — LLM Worker (Ollama)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ai
+  - document-intelligence
+  - llm-worker-worker
+maintainers:
+  - name: contribdev
