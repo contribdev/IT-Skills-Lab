@@ -317,8 +317,186 @@ CoreDNS читает все ключи с суффиксом .server из coredn
 Rollout — процесс замены старых подов на новые при изменении Deployment. Kubernetes делает это постепенно, не убивая все поды сразу, чтобы сервис оставался доступен.
 
 
+- [x] Этап 5. Ingress и TLS
+Цель данного этапа сделать API доступным снаружи по https://documents.local
 
-- [ ] Этап 5. Ingress и TLS
+В качестве Ingress Controller буду использовать Contour
+
+Envoy —  edge proxy, который:
+- Принимает TCP/HTTP-соединения снаружи
+- Роутит HTTP-запросы на нужные backend'ы
+- Балансирует нагрузку
+- Логирует, собирает метрики
+Каждый Envoy слушает порты 8080/8443 (HTTP/HTTPS)
+
+Contour — control plane для Envoy. Написан на Go. Программа, которая: 
+- Смотрит в Kubernetes API — читает HTTPProxy, Ingress, Service, Endpoints.
+- Из этих ресурсов строит конфигурацию для Envoy
+- Отправляет её в Envoy через xDS (специальный протокол для управления Envoy)
+
+Contour - Ingress Controller, который читает смотрит на Ingress ресурсы в кластер api, превращает их в конфигурацию и программирует свой прокси (envoy)
+
+┌────────────────────────────────────────────────────────────────────┐
+│ Windows (браузер)                                                  │
+│                                                                    │
+│ 1. getaddrinfo("documents.local") → hosts → 192.168.100.11         │
+│ 2. TCP connect к 192.168.100.11:443                                │
+│ 3. TLS handshake: ClientHello(SNI=documents.local)                 │
+│    → Envoy отвечает сертификатом documents-local-tls                │
+│ 4. GET /healthz (шифрованный)                                      │
+└────────────────────┬───────────────────────────────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────────────────────────────┐
+│ ServiceLB / MetalLB (192.168.100.11)                               │
+│ iptables: 443 → pod svclb-contour-envoy на ноде                    │
+└────────────────────┬───────────────────────────────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────────────────────────────┐
+│ Pod contour-envoy-xxx (namespace projectcontour)                   │
+│                                                                    │
+│ 5. TLS handshake завершён, SNI=documents.local                     │
+│ 6. Envoy ищет HTTPProxy с fqdn=documents.local                     │
+│ 7. Находит api-proxy → Service api:8080                            │
+│ 8. CoreDNS: api.ai-doc-platform.svc.cluster.local → 10.43.x.x      │
+│ 9. TCP connect к ClusterIP Service api                             │
+└────────────────────┬───────────────────────────────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────────────────────────────┐
+│ kube-proxy на ноде (iptables)                                      │
+│ 10. ClusterIP 10.43.x.x:8080 → pod 10.42.1.100:8080 (DNAT)         │
+└────────────────────┬───────────────────────────────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────────────────────────────┐
+│ Pod api-xxx (namespace ai-doc-platform)                            │
+│                                                                    │
+│ 11. FastAPI: GET /healthz → return {"status": "ok"}                │
+│                                                                    │
+│ 12. Ответ идёт обратно тем же путём                                │
+└────────────────────┬───────────────────────────────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────────────────────────────┐
+│ Windows (браузер)                                                  │
+│ 13. Показывает: {"status": "ok"}                                   │
+└────────────────────────────────────────────────────────────────────┘
+
+Трафик от клиента до пода:
+Запрос https://documents.local/healthz
+1) dns резолвинг: браузер пытается разрешить адресс.
+Windows смотри в порядке:
+-- Локальный кеш
+-- файл C:\Windows\System32\drivers\etc\hosts (мой вариант)
+-- настроенные DNS серверы
+
+в файле найдет строку 192.168.100.11  documents.local
+192.168.100.11 - External ip который выдал LoadBalancer
+
+2) TCP соединение к 192.168.100.11:443
+Это внешний IP Service contour-envoy
+k3s ServiceLB (klipper-lb) — для каждой ноды создаётся под svclb-contour-envoy-. Этот под делает iptables-правила, перенаправляющие трафик на порт 8080/8443 в Envoy. EXTERNAL-IP —  реальный IP ноды, на которой живёт svclb-*.
+
+3) TLS handshake
+Первое, что происходит — TLS handshake.
+Браузер отправляет ClientHello, который включает в себя:
+- подддерживаемы версии TLS
+- Cipher suites
+- SNI (Server Name Indication) — documents.local
+Браузер говорит: «я хочу соединиться с documents.local». Это позволяет Envoy выбрать правильный сертификат из нескольких (если их много).
+
+Envoy:
+-Смотрит на SNI documents.local.
+-Ищет соответствующий HTTPProxy с fqdn: documents.local.
+-Находит сертификат в Secret documents-local-tls.
+-Отправляет ServerHello + сертификат.
+
+Далее происходит обмен ключами, устанавливается шифрованный канал
+
+4) HTTP-запрос на Envoy
+
+Браузер отправляет зашифрованный HTTP-запрос.
+Envoy расшифровывает, Находит HTTPProxy с fqdn: documents.local (уже знает из TLS handshake), Смотрит routes, создаёт новое соединение к Service api (внутри кластера, без TLS —** в энвой уже расшифровано).
+
+5) Service api — балансировка
+Envoy обращается к api.ai-doc-platform.svc.cluster.local:8080
+DNS резолвинг внутри кластера.
+Envoy в поде contour-envoy-xxx содержит свой /etc/resolv.conf.
+CoreDNS резолвит api.ai-doc-platform.svc.cluster.local → ClusterIP Service api
+Envoy устанавливает TCP к ClusterIP
+
+6) приложение в полк 
+Pod api-xxx принимает TCP-соединение на порт 8080
+
+Ответ идёт обратно тем же путём
+FastAPI → uvicorn → pod api-xxx → (kube-proxy reverse NAT) → Service api → Envoy → браузер
+
+
+Тезисно:
+- Трафик идёт через четыре независимых механизма. DNS (hosts), LoadBalancer (ServiceLB), TLS (Envoy), роутинг (HTTPProxy + Service)
+- SNI связывает TLS и HTTPProxy. Envoy по имени в ClientHello находит нужный сертификат и маршрут.
+- Envoy — не только proxy, но и TLS-терминатор. Расшифровывает на входе, шифрует на выходе
+- Edge proxy — прокси на границе сети.Принимает трафик снаружи и передаёт внутрь. Стоит на краю (edge) кластера.
+
+
+TLS (Transport Layer Security) — криптографический протокол, который обеспечивает безопасную передачу данных по сети. Преемник SSL (устаревшее название).
+HTTPS = HTTP + TLS.
+
+Обеспечивает:
+- Конфиденциальность
+- Целостность
+- Аутентификация
+
+Сертификат = публичный ключ + метаданные + подпись CA. Доверие — через CA.
+
+Установка cert-manager
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+
+helm install cert-manager jetstack/cert-manager \
+    --namespace cert-manager \
+    --create-namespace \
+    --set installCRDs=true
+
+ClusterIssuer — это ресурс cert-manager, который представляет собой центр сертификации (CA) на уровне всего кластера. Он используется для автоматического выпуска TLS-сертификатов и управления ими.
+
+Интеграция с Ingress: В аннотации Ingress можно указать cert-manager.io/cluster-issuer, и сертификат будет выпущен автоматически. Namespace Ingress при этом не важен.
+
+Тип ClusterIssuer: Это CRD, который определяет, как подписывать сертификаты. В spec указывается backend: ACME (Let's Encrypt), CA, Vault и т.д.
+
+Общий CA на весь кластер: Подходит, если все приложения работают в рамках одного доверенного домена.
+
+Реализация:
+
+ClusterIssuer selfsigned-issuer	ClusterIssuer	cluster-wide	Выпускает самоподписанные сертификаты
+
+Certificate selfsigned-ca	Certificate	cert-manager	Корневой CA — им будем подписывать всё
+
+ClusterIssuer selfsigned-ca-issuer	ClusterIssuer	cluster-wide	Подписывает сертификаты нашим CA
+
+Certificate documents-local-tls	Certificate	ai-doc-platform	Сертификат для documents.local
+
+Secret selfsigned-ca-key-pair	Secret	cert-manager	Приватный ключ + сертификат CA
+
+Secret documents-local-tls	Secret	ai-doc-platform	Приватный ключ + сертификат домена
+
+HTTPProxy api-proxy	HTTPProxy	ai-doc-platform	Правило роутинга Contour
+
+Цепочка TLS
+Этап 1 — создаём корневой CA.
+ClusterIssuer selfsigned-issuer выпускает Certificate selfsigned-ca с флагом isCA: true. Это корневой сертификат. При выпуске создаётся Secret selfsigned-ca-key-pair в namespace cert-manager — там лежат приватный ключ и сертификат CA.
+
+Этап 2 — создаём issuer, который умеет подписывать домены нашим CA
+ClusterIssuer selfsigned-ca-issuer читает этот Secret и использует CA для подписи. Теперь есть «паспортный стол» — источник доверенных сертификатов.
+
+Этап 3 — выпускаем сертификат для домена.
+Certificate documents-local-tls обращается к selfsigned-ca-issuer, тот генерирует ключ для домена, подписывает его приватным ключом CA и кладёт результат в Secret documents-local-tls в namespace приложения.
+
+Этап 4 — HTTPProxy использует сертификат.
+HTTPProxy api-proxy ссылается на этот Secret через tls.secretName. Contour читает Secret и через xDS передаёт Envoy правило: слушать 443, терминировать TLS этим сертификатом, роутить запросы для documents.local на Service api.
+
 - [ ] Этап 6. Секреты и политики
 - [ ] Этап 7. Observability
 - [ ] Этап 8. KEDA

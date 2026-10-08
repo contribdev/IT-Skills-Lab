@@ -1,0 +1,16 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: documents-local-tls
+  namespace: ai-doc-platform
+spec:
+  secretName: documents-local-tls
+  duration: 2160h
+  renewBefore: 360h
+  commonName: documents.local
+  dnsNames:
+    - documents.local
+  issuerRef:
+    name: selfsigned-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
