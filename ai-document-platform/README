@@ -3,71 +3,90 @@
 Платформа для автоматической обработки документов: OCR + локальная LLM.
 Принимает PDF/сканы → извлекает текст → структурирует через LLM → отдаёт JSON.
 
+---
+
 ## Статус
 
-- [x] Этап 0. Подготовка
-    Установка k9s, terraform, установка локальной LLM - модель llama3.1:8b
-    Фиксация первичной архитектуры
-    
-- [x] Этап 1. Terraform: инфраструктура
-    
-1.    Разработка модуля STORAGE. Модуль должен создавать пространство имен, secret и производить установку и конфигурирование minio
-    (https://github.com/minio/minio/tree/master/helm/minio)
+- [x] **Этап 0. Подготовка**
+  - Установка k9s, terraform, установка локальной LLM — модель `llama3.1:8b`
+  - Фиксация первичной архитектуры
 
-Реализован модуль terraform/modules/storage:
-    -namespace storage
-    -Secret minio-credentials (стандартные ключи access-key / secret-key)
-    -Helm release MinIO (Bitnami chart)
-    -outputs в модуле и в environments/dev
-    -Функциональная проверка через rclone — успешно.
+---
 
-Проблема: официальные образы minio/minio (Docker Hub) удалены из публичного доступа. Community-сборки (netvark/minio) несовместимы с официальным Helm-чартом — /usr/bin/docker-entrypoint.sh: not found.
+- [x] **Этап 1. Terraform: инфраструктура**
 
-Решение: перейти на Bitnami MinIO chart (oci://registry-1.docker.io/bitnamicharts), но и там основные теги исчезли. Использовать образы из bitnamilegacy:
+### 1. Разработка модуля STORAGE
+
+Модуль должен создавать пространство имен, secret и производить установку и конфигурирование MinIO
+([https://github.com/minio/minio/tree/master/helm/minio](https://github.com/minio/minio/tree/master/helm/minio))
+
+**Реализован модуль `terraform/modules/storage`:**
+- namespace `storage`
+- Secret `minio-credentials` (стандартные ключи `access-key` / `secret-key`)
+- Helm release MinIO (Bitnami chart)
+- outputs в модуле и в `environments/dev`
+- Функциональная проверка через rclone — успешно
+
+**Проблема:** официальные образы `minio/minio` (Docker Hub) удалены из публичного доступа. Community-сборки (`netvark/minio`) несовместимы с официальным Helm-чартом — `/usr/bin/docker-entrypoint.sh: not found`.
+
+**Решение:** перейти на Bitnami MinIO chart (`oci://registry-1.docker.io/bitnamicharts`), но и там основные теги исчезли. Использовать образы из `bitnamilegacy`:
+
+```hcl
 set { name = "image.repository"; value = "bitnamilegacy/minio" }
 set { name = "image.tag";        value = "2025.7.23-debian-12-r5" }
+```
 
-Для проверки функциональности использовал rclone
+**Проверка функциональности через rclone**
+
 Настройка:
+```bash
 rclone config create local s3 \
   provider=Minio \
   endpoint=http://localhost:9000 \
   access_key_id=admin \
   secret_access_key=ПАРОЛЬ
+```
 
 Основные команды:
-rclone lsd local:	                          Список бакетов
-rclone ls local:documents	                  Список файлов в бакете
-rclone copy file.txt local:documents/	      Загрузить файл
-rclone copy local:documents/file.txt /tmp/	  Скачать файл
-rclone delete local:documents/file.txt	      Удалить файл
-rclone mkdir local:newbucket	              Создать бакет
-rclone purge local:newbucket	              Удалить бакет со всем содержимым
-rclone config show local	                  Показать настройки
 
-2. Разработка модуля DATABASE
-Для управления ресурсами postgresql использую CloudNativePG (CNPG)
+| Команда | Описание |
+|---------|----------|
+| `rclone lsd local:` | Список бакетов |
+| `rclone ls local:documents` | Список файлов в бакете |
+| `rclone copy file.txt local:documents/` | Загрузить файл |
+| `rclone copy local:documents/file.txt /tmp/` | Скачать файл |
+| `rclone delete local:documents/file.txt` | Удалить файл |
+| `rclone mkdir local:newbucket` | Создать бакет |
+| `rclone purge local:newbucket` | Удалить бакет со всем содержимым |
+| `rclone config show local` | Показать настройки |
 
-CloudNativePG — самый популярный PostgreSQL-operator. Что он даёт:
+---
 
-Функция	           Что делает
-Репликация	       Настраивает streaming replication между instances
-Failover	       При падении primary — повышает replica до primary
-Service	           Создаёт -rw, -ro, -r сервисы (read-write, read-only, any)
-Bootstrap	       Инициализирует БД, пользователей, пароли
-Backup	           Автоматические бэкапы в S3
-Мониторинг	       Экспортирует метрики для Prometheus
+### 2. Разработка модуля DATABASE
 
-CRD (Custom Resource Definition) — расширение Kubernetes. Ты добавляешь новый тип ресурса.
+Для управления ресурсами PostgreSQL использую **CloudNativePG (CNPG)**.
 
-CR (Custom Resource) — экземпляр этого типа. Как Pod — экземпляр Deployment.
+**CloudNativePG** — самый популярный PostgreSQL-operator. Что он даёт:
 
-Работа с Операторами
-1) Установка оператора (как обычный чарт)
-2) Ожидание готовности CRD - иначе CR не создастся.
-3) Создать CR — через kubernetes_manifest
+| Функция | Что делает |
+|---------|------------|
+| Репликация | Настраивает streaming replication между instances |
+| Failover | При падении primary — повышает replica до primary |
+| Service | Создаёт `-rw`, `-ro`, `-r` сервисы (read-write, read-only, any) |
+| Bootstrap | Инициализирует БД, пользователей, пароли |
+| Backup | Автоматические бэкапы в S3 |
+| Мониторинг | Экспортирует метрики для Prometheus |
 
-Реализован модуль `terraform/modules/database`:
+> **CRD (Custom Resource Definition)** — расширение Kubernetes. Ты добавляешь новый тип ресурса.
+>
+> **CR (Custom Resource)** — экземпляр этого типа. Как Pod — экземпляр Deployment.
+
+**Работа с Операторами:**
+1. Установка оператора (как обычный чарт)
+2. Ожидание готовности CRD — иначе CR не создастся
+3. Создать CR — через `kubernetes_manifest`
+
+**Реализован модуль `terraform/modules/database`:**
 - namespace `cnpg-system` (для operator)
 - namespace `database` (для PostgreSQL)
 - Helm release CNPG operator
@@ -75,20 +94,27 @@ CR (Custom Resource) — экземпляр этого типа. Как Pod — 
 - CR `Cluster` через `kubectl_manifest`
 - outputs в модуле и в окружении
 
-Столкнулся с проблемами:
-1) При применении terraform plan получил ошибку
-API did not recognize GroupVersionKind from manifest (CRD may not be installed)
+**Столкнулся с проблемами:**
 
-Разделю apply на две части: сначала закомментирую ресурс manifest, запущу только установку crd, потом повторно запущу apply раскомментировав manifest1
+1. При применении `terraform plan` получил ошибку:
+   ```
+   API did not recognize GroupVersionKind from manifest (CRD may not be installed)
+   ```
+   Разделю apply на две части: сначала закомментирую ресурс manifest, запущу только установку CRD, потом повторно запущу apply раскомментировав manifest.
 
-2) `kubernetes_manifest` не умеет работать с CR от operator'ов. CNPG дописывает дефолтные параметры PostgreSQL (`wal_level`, `archive_mode`, etc.), Terraform видит «новые элементы» — падает.
+2. `kubernetes_manifest` не умеет работать с CR от operator'ов. CNPG дописывает дефолтные параметры PostgreSQL (`wal_level`, `archive_mode`, etc.), Terraform видит «новые элементы» — падает.
 
-3) Terraform искал `hashicorp/kubectl`, но такого провайдера нет. Community-провайдер — `gavinbunney/kubectl`.  модуле `database` не было `versions.tf`. Terraform сам подставлял `hashicorp/` по имени ресурса `kubectl_manifest`.
+3. Terraform искал `hashicorp/kubectl`, но такого провайдера нет. Community-провайдер — `gavinbunney/kubectl`. В модуле `database` не было `versions.tf`. Terraform сам подставлял `hashicorp/` по имени ресурса `kubectl_manifest`.
 
-Database cluster — это набор баз данных, управляемых одним экземпляром серверного процесса PostgreSQL.
-Cluster — это custom resource, который описывает желаемое состояние PostgreSQL-кластера: количество инстансов, ресурсы, параметры, стратегию backup.
+> **Database cluster** — это набор баз данных, управляемых одним экземпляром серверного процесса PostgreSQL.
+>
+> **Cluster** — это custom resource, который описывает желаемое состояние PostgreSQL-кластера: количество инстансов, ресурсы, параметры, стратегию backup.
+
+**Структура CNPG Cluster:**
 
 Один CNPG Cluster создаёт несколько классических PostgreSQL-кластеров — по одному на каждый instance.
+
+```
 CNPG Cluster (один YAML-объект в Kubernetes)
 │
 ├── Pod postgres-1 (primary)
@@ -106,16 +132,25 @@ CNPG Cluster (один YAML-объект в Kubernetes)
         ├── база: postgres
         ├── база: template0, template1
         └── роли: postgres, app
+```
+
 Каждый pod — самостоятельный PostgreSQL-сервер со своим классическим кластером. Replica копирует данные с primary через streaming replication.
 
-3. Разработка модуля queue:
--namespace queue
--Secret rabbitmq-credentials с готовыми amqp-url и management-url
--Helm release RabbitMQ (Bitnami chart) с Management plugin
--ConfigMap rabbitmq-create-queues-script со скриптом создания очередей
--Kubernetes Job rabbitmq-create-queues — создаёт очереди через Management API
--outputs в модуле и в окружении
+---
 
+### 3. Разработка модуля QUEUE
+
+**Реализовано:**
+- namespace `queue`
+- Secret `rabbitmq-credentials` с готовыми `amqp-url` и `management-url`
+- Helm release RabbitMQ (Bitnami chart) с Management plugin
+- ConfigMap `rabbitmq-create-queues-script` со скриптом создания очередей
+- Kubernetes Job `rabbitmq-create-queues` — создаёт очереди через Management API
+- outputs в модуле и в окружении
+
+**Структура Terraform:**
+
+```
 Terraform
   │
   ├── kubernetes_namespace "queue"
@@ -127,32 +162,44 @@ Terraform
         └── Job pod
              ├── ждёт готовности Management API
              ├── PUT /api/queues/%2F/ocr.queue
-             ├── PUT /api/queues/%2F/llm.queue
+             └── PUT /api/queues/%2F/llm.queue
+```
 
-Management plugin — расширение RabbitMQ, которое добавляет HTTP API и веб-интерфейс для управления брокером. Без него RabbitMQ работает, но управлять можно только через AMQP-протокол или CLI rabbitmqctl.
+> **Management plugin** — расширение RabbitMQ, которое добавляет HTTP API и веб-интерфейс для управления брокером. Без него RabbitMQ работает, но управлять можно только через AMQP-протокол или CLI `rabbitmqctl`.
+>
+> **Erlang cookie** — секретная строка, которая используется для аутентификации между нодами Erlang. Все ноды кластера RabbitMQ должны иметь одинаковый cookie.
 
-Erlang cookie — секретная строка, которая используется для аутентификации между нодами Erlang. Все ноды кластера RabbitMQ должны иметь одинаковый cookie.
+---
 
-- [x] Этап 2. Базовые сервисы
-MinIO, PostgreSQL, RabbitMQ в кластере
+- [x] **Этап 2. Базовые сервисы**
+  - MinIO, PostgreSQL, RabbitMQ в кластере
 
-- [x] Этап 3. Приложения
-      [x] API: config, logging, db, s3, rabbit
-      [x] API: models, routes, main, Dockerfile
-      [x] OCR Worker
-      [x] LLM Worker
-      
-- [x] Этап 4. Helm-чарты
-Реализован Helm чарт для api
-Столкнулся со следующими проблемами и вопросами
+---
 
-1. Почему port name http, а protocol TCP
-name: http — это логическое имя порта внутри Deployment. Kubernetes использует его как ссылку.
-protocol: TCP — транспортный протокол L4. HTTP — это прикладной протокол L7, работающий поверх TCP. Порт 8080 принимает HTTP-трафик, но с точки зрения Kubernetes это просто TCP-сокет.
-Kubernetes на уровне ports работает с L4 (транспортный уровень) — TCP/UDP/SCTP. Он не знает, что внутри TCP-соединения бежит HTTP. Для k8s порт 8080 — это просто «открытый TCP-сокет». HTTP — это уже содержимое этого сокета, которое понимает только само приложение и тот, кто с ним говорит.
+- [x] **Этап 3. Приложения**
+  - [x] API: config, logging, db, s3, rabbit
+  - [x] API: models, routes, main, Dockerfile
+  - [x] OCR Worker
+  - [x] LLM Worker
 
-2. Сетевое взаимодействие компонентов
-Путь запроса API 
+---
+
+- [x] **Этап 4. Helm-чарты**
+
+Реализован Helm чарт для API. Столкнулся со следующими проблемами и вопросами:
+
+#### 1. Почему port name `http`, а protocol `TCP`?
+
+- `name: http` — это логическое имя порта внутри Deployment. Kubernetes использует его как ссылку.
+- `protocol: TCP` — транспортный протокол L4. HTTP — это прикладной протокол L7, работающий поверх TCP.
+
+Порт 8080 принимает HTTP-трафик, но с точки зрения Kubernetes это просто TCP-сокет. Kubernetes на уровне `ports` работает с L4 (транспортный уровень) — TCP/UDP/SCTP. Он не знает, что внутри TCP-соединения бежит HTTP. Для k8s порт 8080 — это просто «открытый TCP-сокет». HTTP — это уже содержимое этого сокета, которое понимает только само приложение и тот, кто с ним говорит.
+
+#### 2. Сетевое взаимодействие компонентов
+
+**Путь запроса API:**
+
+```
 API pod (10.42.1.5)
   │
   │ 1. getaddrinfo("postgres-rw.database.svc.cluster.local")
@@ -177,122 +224,141 @@ PostgreSQL pod (10.42.2.7)
   │
   ▼
 Возврат ответа тем же путём (reverse NAT)
+```
 
-3. как передаются креды
-слой 1 - в values.yaml лежит шаблон
+#### 3. Как передаются креды
+
+**Слой 1** — в `values.yaml` лежит шаблон:
+```yaml
 secrets:
   DATABASE_URL: ""
   RABBITMQ_URL: ""
   S3_ACCESS_KEY: ""
   S3_SECRET_KEY: ""
+```
 Здесь видно, какие секреты нужны, но значений нет.
 
-слой 2 - передача при установке
+**Слой 2** — передача при установке:
+```bash
 helm install api ./charts/api -n ai-doc-platform \
   --set secrets.DATABASE_URL="postgresql+asyncpg://app:${DB_PASSWORD}@postgres-rw.database.svc.cluster.local:5432/documents" \
   --set secrets.RABBITMQ_URL="amqp://app:${RMQ_PASSWORD}@rabbitmq.queue.svc.cluster.local:5672/" \
   --set secrets.S3_ACCESS_KEY="${S3_ACCESS}" \
   --set secrets.S3_SECRET_KEY="${S3_SECRET}"
+```
 
-слой 3 - Рендер Secret в кластере.
-secret.yaml
+**Слой 3** — рендер Secret в кластере (`secret.yaml`):
+```yaml
 data:
   {{- range $key, $value := .Values.secrets }}
   {{- if $value }}
   {{ $key }}: {{ $value | b64enc | quote }}
   {{- end }}
   {{- end }}
+```
 
-слой 4 - передача в под
-Deployment использует:
-
+**Слой 4** — передача в под. Deployment использует:
+```yaml
 envFrom:
   - configMapRef:
       name: api
   - secretRef:
       name: api
+```
 
-Слой 5 - Чтение в приложении.
-pydantic-settings читает DATABASE_URL из env и мапит в поле database_url
+**Слой 5** — чтение в приложении. `pydantic-settings` читает `DATABASE_URL` из env и мапит в поле `database_url`.
 
-4. Инструменты управления тем, на какую ноду попадает pod
-- nodeSelector - Самый простой. Жёсткий фильтр по меткам ноды.
+#### 4. Инструменты управления тем, на какую ноду попадает pod
+
+**`nodeSelector`** — самый простой. Жёсткий фильтр по меткам ноды.
 Pod запустится только на нодах, у которых все указанные метки. Если ни одной — pod в Pending.
 
-- tolerations - Про taints. Ноды могут иметь taints — метки «не ставь сюда поды без явного разрешения».
-Пример: у GPU-ноды taint gpu=true:NoSchedule — обычные поды туда не встают, чтобы не мешать. Pod, который хочет на GPU, объявляет toleration:
+**`tolerations`** — про taints. Ноды могут иметь taints — метки «не ставь сюда поды без явного разрешения».
+
+Пример: у GPU-ноды taint `gpu=true:NoSchedule` — обычные поды туда не встают, чтобы не мешать. Pod, который хочет на GPU, объявляет toleration:
+```yaml
 tolerations:
   - key: "gpu"
     operator: "Equal"
     value: "true"
     effect: "NoSchedule"
+```
 Теперь этот pod может быть поставлен на GPU-ноду, остальные — нет.
-Когда: специальные ноды (GPU, control-plane, выделенные), которые должны принимать только определённые поды.
 
-- affinity
-Самый мощный. Три подвида:
+*Когда использовать:* специальные ноды (GPU, control-plane, выделенные), которые должны принимать только определённые поды.
 
-nodeAffinity — на какие ноды ставим (по меткам, с логикой In, NotIn, Exists, DoesNotExist). Жёсткий (requiredDuringScheduling) или мягкий (preferredDuringScheduling).
+**`affinity`** — самый мощный. Три подвида:
 
-podAffinity — ставить pod рядом с другими подами (по меткам). Например: «ставь на ноду, где уже есть pod с app=cache» — минимизация latency.
+- **nodeAffinity** — на какие ноды ставим (по меткам, с логикой `In`, `NotIn`, `Exists`, `DoesNotExist`). Жёсткий (`requiredDuringScheduling`) или мягкий (`preferredDuringScheduling`).
+- **podAffinity** — ставить pod рядом с другими подами (по меткам). Например: «ставь на ноду, где уже есть pod с `app=cache`» — минимизация latency.
+- **podAntiAffinity** — не ставить рядом. Классика — replicas одного Deployment раскинуть по разным нодам.
 
-podAntiAffinity — не ставить рядом. Классика — replicas одного Deployment раскинуть по разным нодам:
+#### 5. Сущность ServiceAccount
 
-5. Сущность ServiceAccount
-Идентификация пода (не человека) внутри кластера. 
-Три вещи вместе:
-- Объект в K8s — ServiceAccount в namespace.
-- Токен — JWT, автоматически смонтированный в под по пути /var/run/secrets/kubernetes.io/serviceaccount/token.
-- RBAC bindings — правила, что этой SA разрешено.
+Идентификация пода (не человека) внутри кластера. Три вещи вместе:
+- **Объект в K8s** — ServiceAccount в namespace
+- **Токен** — JWT, автоматически смонтированный в под по пути `/var/run/secrets/kubernetes.io/serviceaccount/token`
+- **RBAC bindings** — правила, что этой SA разрешено
 
 SA + токен идентифицируют «кто я», RBAC решает «что мне можно».
 
-Зачем создавать свою SA:
--Принцип наименьших привилегий — каждое приложение использует свою SA с минимальными правами.
--Изоляция — компрометация одной SA не даёт прав другой.
--IRSA (AWS) / Workload Identity (GCP) — привязка SA к cloud IAM-роли. Под берёт AWS credentials без хранения статических ключей.
--External Secrets Operator — приложению нужна SA, чтобы читать K8s Secret, если ESO работает через SA.
--Image pull secrets — можно повесить на SA, и все поды namespace автоматически получат доступ к приватному registry.
+**Зачем создавать свою SA:**
+- **Принцип наименьших привилегий** — каждое приложение использует свою SA с минимальными правами
+- **Изоляция** — компрометация одной SA не даёт прав другой
+- **IRSA (AWS) / Workload Identity (GCP)** — привязка SA к cloud IAM-роли. Под берёт AWS credentials без хранения статических ключей
+- **External Secrets Operator** — приложению нужна SA, чтобы читать K8s Secret, если ESO работает через SA
+- **Image pull secrets** — можно повесить на SA, и все поды namespace автоматически получат доступ к приватному registry
 
-В моем случае - SA api без ролей — используется только для идентификации. API не должен иметь доступ к K8s API.
+> В моем случае — SA `api` без ролей — используется только для идентификации. API не должен иметь доступ к K8s API.
 
+---
 
-Деплой ocr-worker
+**Деплой ocr-worker:**
+```bash
 helm install ocr-worker ./charts/ocr-worker -n ai-doc-platform \
     --set secrets.DATABASE_URL="postgresql+asyncpg://app:${DB_PASSWORD}@postgres-rw.database.svc.cluster.local:5432/documents" \
     --set secrets.RABBITMQ_URL="amqp://app:${RMQ_PASSWORD}@rabbitmq.queue.svc.cluster.local:5672/" \
     --set secrets.S3_ACCESS_KEY="${S3_ACCESS}" \
     --set secrets.S3_SECRET_KEY="${S3_SECRET}"
+```
 
-При запуске забыл обновить имя образа после копирования
-был передан образ апи сервиса
-для того чтобы обновить необходимо выполнить 
+> **Ошибка:** при запуске забыл обновить имя образа после копирования — был передан образ API сервиса.
 
+**Для обновления необходимо выполнить:**
+```bash
 helm upgrade ocr-worker ./charts/ocr-worker -n ai-doc-platform \
     --set secrets.DATABASE_URL="postgresql+asyncpg://app:${DB_PASSWORD}@postgres-rw.database.svc.cluster.local:5432/documents" \
     --set secrets.RABBITMQ_URL="amqp://app:${RMQ_PASSWORD}@rabbitmq.queue.svc.cluster.local:5672/" \
     --set secrets.S3_ACCESS_KEY="${S3_ACCESS}" \
     --set secrets.S3_SECRET_KEY="${S3_SECRET}"
+```
 
+```bash
 helm upgrade llm-worker ./charts/llm-worker -n ai-doc-platform \
     --set secrets.DATABASE_URL="postgresql+asyncpg://app:${DB_PASSWORD}@postgres-rw.database.svc.cluster.local:5432/documents" \
     --set secrets.RABBITMQ_URL="amqp://app:${RMQ_PASSWORD}@rabbitmq.queue.svc.cluster.local:5672/" \
     --set secrets.S3_ACCESS_KEY="${S3_ACCESS}" \
-    --set secrets.S3_SECRET_KEY="${S3_SECRET}"   
+    --set secrets.S3_SECRET_KEY="${S3_SECRET}"
+```
 
-Доступ к ollama будет осуществляться с помощью ExternalName
-Создан соответствующий сервис 
+---
 
+**Доступ к Ollama через ExternalName**
+
+Создан соответствующий сервис:
+```
 ollama-external   ExternalName   <none>         ollama.local   <none>     17s
 ExternalIP ollama.local
+```
 
-ollama.local резолвится в win ip моей локальной машины
+`ollama.local` резолвится в Windows IP моей локальной машины.
 
-CoreDNS — DNS-сервер, который поставляется вместе с Kubernetes и обслуживает все DNS-запросы внутри кластера. Это единственный DNS-сервер, к которому обращаются поды.
+> **CoreDNS** — DNS-сервер, который поставляется вместе с Kubernetes и обслуживает все DNS-запросы внутри кластера. Это единственный DNS-сервер, к которому обращаются поды.
 
-1 слой. CoreDNS отвечает на ollama-external.ai-doc-platform.svc.cluster.local CNAME-записью ollama.local. Приложение видит CNAME и резолвит его заново — теперь через общий CoreDNS, не зная про Service.
+**Слой 1.** CoreDNS отвечает на `ollama-external.ai-doc-platform.svc.cluster.local` CNAME-записью `ollama.local`. Приложение видит CNAME и резолвит его заново — теперь через общий CoreDNS, не зная про Service.
 
-2 слой. CoreDNS override.
+**Слой 2.** CoreDNS override:
+```yaml
 data:
   ollama.server: |
     ollama.local:53 {
@@ -301,48 +367,55 @@ data:
         fallthrough
       }
     }
+```
 
-CoreDNS читает все ключи с суффиксом .server из coredns-custom и включает их как дополнительные server-блоки.** Зона ollama.local:53 обслуживается плагином hosts:** статический маппинг 172.21.128.1 ollama.local.
+CoreDNS читает все ключи с суффиксом `.server` из `coredns-custom` и включает их как дополнительные server-блоки. Зона `ollama.local:53` обслуживается плагином `hosts` — статический маппинг `172.21.128.1 ollama.local`.
 
-Логика:
-Запрос nslookup ollama.local:
--CoreDNS смотрит в свой Corefile.
--Находит server-блок для зоны ollama.local.
--Вызывает плагин hosts.
--Плагин находит 172.21.128.1.
--Отвечает: ollama.local → 172.21.128.1.
+**Логика запроса `nslookup ollama.local`:**
+1. CoreDNS смотрит в свой Corefile
+2. Находит server-блок для зоны `ollama.local`
+3. Вызывает плагин `hosts`
+4. Плагин находит `172.21.128.1`
+5. Отвечает: `ollama.local → 172.21.128.1`
 
-53 — стандартный порт DNS
+> **53** — стандартный порт DNS
+>
+> **Rollout** — процесс замены старых подов на новые при изменении Deployment. Kubernetes делает это постепенно, не убивая все поды сразу, чтобы сервис оставался доступен.
 
-Rollout — процесс замены старых подов на новые при изменении Deployment. Kubernetes делает это постепенно, не убивая все поды сразу, чтобы сервис оставался доступен.
 
+---
 
-- [x] Этап 5. Ingress и TLS
-Цель данного этапа сделать API доступным снаружи по https://documents.local
+- [x] **Этап 5. Ingress и TLS**
 
-В качестве Ingress Controller буду использовать Contour
+**Цель:** сделать API доступным снаружи по `https://documents.local`
 
-Envoy —  edge proxy, который:
+В качестве Ingress Controller буду использовать **Contour**.
+
+**Envoy** — edge proxy, который:
 - Принимает TCP/HTTP-соединения снаружи
 - Роутит HTTP-запросы на нужные backend'ы
 - Балансирует нагрузку
 - Логирует, собирает метрики
-Каждый Envoy слушает порты 8080/8443 (HTTP/HTTPS)
 
-Contour — control plane для Envoy. Написан на Go. Программа, которая: 
-- Смотрит в Kubernetes API — читает HTTPProxy, Ingress, Service, Endpoints.
+Каждый Envoy слушает порты `8080`/`8443` (HTTP/HTTPS).
+
+**Contour** — control plane для Envoy. Написан на Go. Программа, которая:
+- Смотрит в Kubernetes API — читает HTTPProxy, Ingress, Service, Endpoints
 - Из этих ресурсов строит конфигурацию для Envoy
 - Отправляет её в Envoy через xDS (специальный протокол для управления Envoy)
 
-Contour - Ingress Controller, который читает смотрит на Ingress ресурсы в кластер api, превращает их в конфигурацию и программирует свой прокси (envoy)
+> **Contour** — Ingress Controller, который смотрит на Ingress ресурсы в Kubernetes API, превращает их в конфигурацию и программирует свой прокси (Envoy).
 
+**Схема прохождения трафика:**
+
+```
 ┌────────────────────────────────────────────────────────────────────┐
 │ Windows (браузер)                                                  │
 │                                                                    │
 │ 1. getaddrinfo("documents.local") → hosts → 192.168.100.11         │
 │ 2. TCP connect к 192.168.100.11:443                                │
 │ 3. TLS handshake: ClientHello(SNI=documents.local)                 │
-│    → Envoy отвечает сертификатом documents-local-tls                │
+│    → Envoy отвечает сертификатом documents-local-tls               │
 │ 4. GET /healthz (шифрованный)                                      │
 └────────────────────┬───────────────────────────────────────────────┘
                      │
@@ -383,75 +456,85 @@ Contour - Ingress Controller, который читает смотрит на In
 │ Windows (браузер)                                                  │
 │ 13. Показывает: {"status": "ok"}                                   │
 └────────────────────────────────────────────────────────────────────┘
+```
 
-Трафик от клиента до пода:
-Запрос https://documents.local/healthz
-1) dns резолвинг: браузер пытается разрешить адресс.
-Windows смотри в порядке:
--- Локальный кеш
--- файл C:\Windows\System32\drivers\etc\hosts (мой вариант)
--- настроенные DNS серверы
+---
 
-в файле найдет строку 192.168.100.11  documents.local
-192.168.100.11 - External ip который выдал LoadBalancer
+**Трафик от клиента до пода (запрос `https://documents.local/healthz`):**
 
-2) TCP соединение к 192.168.100.11:443
-Это внешний IP Service contour-envoy
-k3s ServiceLB (klipper-lb) — для каждой ноды создаётся под svclb-contour-envoy-. Этот под делает iptables-правила, перенаправляющие трафик на порт 8080/8443 в Envoy. EXTERNAL-IP —  реальный IP ноды, на которой живёт svclb-*.
+**1) DNS резолвинг**
 
-3) TLS handshake
-Первое, что происходит — TLS handshake.
-Браузер отправляет ClientHello, который включает в себя:
-- подддерживаемы версии TLS
+Браузер пытается разрешить адрес. Windows смотрит в порядке:
+- Локальный кеш
+- Файл `C:\Windows\System32\drivers\etc\hosts` (мой вариант)
+- Настроенные DNS серверы
+
+В файле найдет строку `192.168.100.11  documents.local`.
+`192.168.100.11` — External IP, который выдал LoadBalancer.
+
+**2) TCP соединение к `192.168.100.11:443`**
+
+Это внешний IP Service `contour-envoy`.
+
+k3s ServiceLB (klipper-lb) — для каждой ноды создаётся под `svclb-contour-envoy-*`. Этот под делает iptables-правила, перенаправляющие трафик на порт `8080`/`8443` в Envoy. `EXTERNAL-IP` — реальный IP ноды, на которой живёт `svclb-*`.
+
+**3) TLS handshake**
+
+Первое, что происходит — TLS handshake. Браузер отправляет ClientHello, который включает в себя:
+- Поддерживаемые версии TLS
 - Cipher suites
-- SNI (Server Name Indication) — documents.local
+- SNI (Server Name Indication) — `documents.local`
+
 Браузер говорит: «я хочу соединиться с documents.local». Это позволяет Envoy выбрать правильный сертификат из нескольких (если их много).
 
-Envoy:
--Смотрит на SNI documents.local.
--Ищет соответствующий HTTPProxy с fqdn: documents.local.
--Находит сертификат в Secret documents-local-tls.
--Отправляет ServerHello + сертификат.
+**Envoy:**
+- Смотрит на SNI `documents.local`
+- Ищет соответствующий HTTPProxy с `fqdn: documents.local`
+- Находит сертификат в Secret `documents-local-tls`
+- Отправляет ServerHello + сертификат
 
-Далее происходит обмен ключами, устанавливается шифрованный канал
+Далее происходит обмен ключами, устанавливается шифрованный канал.
 
-4) HTTP-запрос на Envoy
+**4) HTTP-запрос на Envoy**
 
-Браузер отправляет зашифрованный HTTP-запрос.
-Envoy расшифровывает, Находит HTTPProxy с fqdn: documents.local (уже знает из TLS handshake), Смотрит routes, создаёт новое соединение к Service api (внутри кластера, без TLS —** в энвой уже расшифровано).
+Браузер отправляет зашифрованный HTTP-запрос. Envoy расшифровывает, находит HTTPProxy с `fqdn: documents.local` (уже знает из TLS handshake), смотрит routes, создаёт новое соединение к Service api (внутри кластера, без TLS — в Envoy уже расшифровано).
 
-5) Service api — балансировка
-Envoy обращается к api.ai-doc-platform.svc.cluster.local:8080
-DNS резолвинг внутри кластера.
-Envoy в поде contour-envoy-xxx содержит свой /etc/resolv.conf.
-CoreDNS резолвит api.ai-doc-platform.svc.cluster.local → ClusterIP Service api
-Envoy устанавливает TCP к ClusterIP
+**5) Service api — балансировка**
 
-6) приложение в полк 
-Pod api-xxx принимает TCP-соединение на порт 8080
+Envoy обращается к `api.ai-doc-platform.svc.cluster.local:8080`. DNS резолвинг внутри кластера. Envoy в поде `contour-envoy-xxx` содержит свой `/etc/resolv.conf`. CoreDNS резолвит `api.ai-doc-platform.svc.cluster.local` → ClusterIP Service api. Envoy устанавливает TCP к ClusterIP.
 
-Ответ идёт обратно тем же путём
-FastAPI → uvicorn → pod api-xxx → (kube-proxy reverse NAT) → Service api → Envoy → браузер
+**6) Приложение в поде**
 
+Pod `api-xxx` принимает TCP-соединение на порт 8080.
 
-Тезисно:
-- Трафик идёт через четыре независимых механизма. DNS (hosts), LoadBalancer (ServiceLB), TLS (Envoy), роутинг (HTTPProxy + Service)
-- SNI связывает TLS и HTTPProxy. Envoy по имени в ClientHello находит нужный сертификат и маршрут.
+**Ответ идёт обратно тем же путём:**
+`FastAPI → uvicorn → pod api-xxx → (kube-proxy reverse NAT) → Service api → Envoy → браузер`
+
+---
+
+**Тезисно:**
+- Трафик идёт через четыре независимых механизма: DNS (hosts), LoadBalancer (ServiceLB), TLS (Envoy), роутинг (HTTPProxy + Service)
+- SNI связывает TLS и HTTPProxy. Envoy по имени в ClientHello находит нужный сертификат и маршрут
 - Envoy — не только proxy, но и TLS-терминатор. Расшифровывает на входе, шифрует на выходе
-- Edge proxy — прокси на границе сети.Принимает трафик снаружи и передаёт внутрь. Стоит на краю (edge) кластера.
+- **Edge proxy** — прокси на границе сети. Принимает трафик снаружи и передаёт внутрь. Стоит на краю (edge) кластера
 
+---
 
-TLS (Transport Layer Security) — криптографический протокол, который обеспечивает безопасную передачу данных по сети. Преемник SSL (устаревшее название).
-HTTPS = HTTP + TLS.
+**TLS (Transport Layer Security)** — криптографический протокол, который обеспечивает безопасную передачу данных по сети. Преемник SSL (устаревшее название).
 
-Обеспечивает:
+> `HTTPS = HTTP + TLS`
+
+**Обеспечивает:**
 - Конфиденциальность
 - Целостность
 - Аутентификация
 
-Сертификат = публичный ключ + метаданные + подпись CA. Доверие — через CA.
+> Сертификат = публичный ключ + метаданные + подпись CA. Доверие — через CA.
 
-Установка cert-manager
+---
+
+**Установка cert-manager:**
+```bash
 helm repo add jetstack https://charts.jetstack.io
 helm repo update
 
@@ -459,51 +542,194 @@ helm install cert-manager jetstack/cert-manager \
     --namespace cert-manager \
     --create-namespace \
     --set installCRDs=true
+```
 
-ClusterIssuer — это ресурс cert-manager, который представляет собой центр сертификации (CA) на уровне всего кластера. Он используется для автоматического выпуска TLS-сертификатов и управления ими.
+**ClusterIssuer** — это ресурс cert-manager, который представляет собой центр сертификации (CA) на уровне всего кластера. Он используется для автоматического выпуска TLS-сертификатов и управления ими.
 
-Интеграция с Ingress: В аннотации Ingress можно указать cert-manager.io/cluster-issuer, и сертификат будет выпущен автоматически. Namespace Ingress при этом не важен.
+- **Интеграция с Ingress:** В аннотации Ingress можно указать `cert-manager.io/cluster-issuer`, и сертификат будет выпущен автоматически. Namespace Ingress при этом не важен.
+- **Тип ClusterIssuer:** Это CRD, который определяет, как подписывать сертификаты. В spec указывается backend: ACME (Let's Encrypt), CA, Vault и т.д.
+- **Общий CA на весь кластер:** Подходит, если все приложения работают в рамках одного доверенного домена.
 
-Тип ClusterIssuer: Это CRD, который определяет, как подписывать сертификаты. В spec указывается backend: ACME (Let's Encrypt), CA, Vault и т.д.
+---
 
-Общий CA на весь кластер: Подходит, если все приложения работают в рамках одного доверенного домена.
+**Реализация:**
 
-Реализация:
+| Ресурс | Тип | Scope | Описание |
+|--------|-----|-------|----------|
+| `selfsigned-issuer` | ClusterIssuer | cluster-wide | Выпускает самоподписанные сертификаты |
+| `selfsigned-ca` | Certificate | cert-manager | Корневой CA — им будем подписывать всё |
+| `selfsigned-ca-issuer` | ClusterIssuer | cluster-wide | Подписывает сертификаты нашим CA |
+| `documents-local-tls` | Certificate | ai-doc-platform | Сертификат для documents.local |
+| `selfsigned-ca-key-pair` | Secret | cert-manager | Приватный ключ + сертификат CA |
+| `documents-local-tls` | Secret | ai-doc-platform | Приватный ключ + сертификат домена |
+| `api-proxy` | HTTPProxy | ai-doc-platform | Правило роутинга Contour |
 
-ClusterIssuer selfsigned-issuer	ClusterIssuer	cluster-wide	Выпускает самоподписанные сертификаты
+---
 
-Certificate selfsigned-ca	Certificate	cert-manager	Корневой CA — им будем подписывать всё
+**Цепочка TLS:**
 
-ClusterIssuer selfsigned-ca-issuer	ClusterIssuer	cluster-wide	Подписывает сертификаты нашим CA
+**Этап 1** — создаём корневой CA.
+`ClusterIssuer selfsigned-issuer` выпускает `Certificate selfsigned-ca` с флагом `isCA: true`. Это корневой сертификат. При выпуске создаётся Secret `selfsigned-ca-key-pair` в namespace `cert-manager` — там лежат приватный ключ и сертификат CA.
 
-Certificate documents-local-tls	Certificate	ai-doc-platform	Сертификат для documents.local
+**Этап 2** — создаём issuer, который умеет подписывать домены нашим CA.
+`ClusterIssuer selfsigned-ca-issuer` читает этот Secret и использует CA для подписи. Теперь есть «паспортный стол» — источник доверенных сертификатов.
 
-Secret selfsigned-ca-key-pair	Secret	cert-manager	Приватный ключ + сертификат CA
+**Этап 3** — выпускаем сертификат для домена.
+`Certificate documents-local-tls` обращается к `selfsigned-ca-issuer`, тот генерирует ключ для домена, подписывает его приватным ключом CA и кладёт результат в Secret `documents-local-tls` в namespace приложения.
 
-Secret documents-local-tls	Secret	ai-doc-platform	Приватный ключ + сертификат домена
+**Этап 4** — HTTPProxy использует сертификат.
+`HTTPProxy api-proxy` ссылается на этот Secret через `tls.secretName`. Contour читает Secret и через xDS передаёт Envoy правило: слушать 443, терминировать TLS этим сертификатом, роутить запросы для `documents.local` на Service api.
 
-HTTPProxy api-proxy	HTTPProxy	ai-doc-platform	Правило роутинга Contour
+---
 
-Цепочка TLS
-Этап 1 — создаём корневой CA.
-ClusterIssuer selfsigned-issuer выпускает Certificate selfsigned-ca с флагом isCA: true. Это корневой сертификат. При выпуске создаётся Secret selfsigned-ca-key-pair в namespace cert-manager — там лежат приватный ключ и сертификат CA.
+- [ ] **Этап 6. Секреты и политики**
 
-Этап 2 — создаём issuer, который умеет подписывать домены нашим CA
-ClusterIssuer selfsigned-ca-issuer читает этот Secret и использует CA для подписи. Теперь есть «паспортный стол» — источник доверенных сертификатов.
+**Цель этапа** — закрыть два важных вопроса:
+- Секреты не должны жить в Helm values и git. Нужен внешний источник истины
+- Все ресурсы должны подчиняться политикам
 
-Этап 3 — выпускаем сертификат для домена.
-Certificate documents-local-tls обращается к selfsigned-ca-issuer, тот генерирует ключ для домена, подписывает его приватным ключом CA и кладёт результат в Secret documents-local-tls в namespace приложения.
+Чтобы не передавать в `helm install` пароли через `--set secrets.password=...`, необходимо использовать внешнее хранилище и **External Secrets Operator**.
 
-Этап 4 — HTTPProxy использует сертификат.
-HTTPProxy api-proxy ссылается на этот Secret через tls.secretName. Contour читает Secret и через xDS передаёт Envoy правило: слушать 443, терминировать TLS этим сертификатом, роутить запросы для documents.local на Service api.
+> **ESO** — оператор, который читает секреты из внешнего хранилища (Vault, AWS SM, GCP SM, Yandex Lockbox) и создаёт обычные K8s Secrets в кластере.
 
-- [ ] Этап 6. Секреты и политики
-- [ ] Этап 7. Observability
-- [ ] Этап 8. KEDA
-- [ ] Этап 9. Chaos Engineering
-- [ ] Этап 10. CI/CD и GitOps
-- [ ] Этап 11. CronJob и финализация
+**Установка ESO:**
+```bash
+helm repo add external-secrets https://charts.external-secrets.io
+helm repo update
+helm install external-secrets external-secrets/external-secrets \
+    --namespace external-secrets \
+    --create-namespace \
+    --set installCRDs=true
+```
 
+| CRD | Назначение |
+|-----|------------|
+| `SecretStore` | Указывает, где брать секреты — в рамках одного namespace |
+| `ClusterSecretStore` | То же, но на весь кластер |
+| `ExternalSecret` | Описание, какой секрет синхронизировать в какой K8s Secret |
 
-## Архитектура
+---
+
+**Установка Vault (dev режим):**
+
+В качестве внешней системы будет использоваться Vault в dev режиме.
+
+```bash
+helm repo add hashicorp https://helm.releases.hashicorp.com
+helm repo update
+
+helm install vault hashicorp/vault \
+    --namespace vault \
+    --create-namespace \
+    --set "server.dev.enabled=true" \
+    --set "server.dev.devRootToken=root-token" \
+    --set "injector.enabled=false" \
+    --set "ui.enabled=true"
+```
+
+**Добавить значения:**
+```bash
+curl -s -X POST \
+  -H "X-Vault-Token: $VAULT_TOKEN" \
+  -d "{\"data\": {
+    \"DATABASE_URL\": \"postgresql+asyncpg://app:${DB_PASSWORD}@postgres-rw.database.svc.cluster.local:5432/documents\",
+    \"RABBITMQ_URL\": \"amqp://app:${RMQ_PASSWORD}@rabbitmq.queue.svc.cluster.local:5672/\",
+    \"S3_ACCESS_KEY\": \"${S3_ACCESS}\",
+    \"S3_SECRET_KEY\": \"${S3_SECRET}\"
+  }}" \
+  $VAULT_ADDR/v1/secret/data/ai-doc-platform | jq .
+```
+
+> UI доступен на порту `8200`
+
+---
+
+**Настройка ESO:**
+
+1. **ESO должен аутентифицироваться в Vault**
+
+   Т.к. Vault работает в режиме dev:
+   ```bash
+   kubectl -n external-secrets create secret generic vault-token \
+       --from-literal=token=root-token
+   ```
+
+2. **ClusterSecretStore**
+
+   `k8s/vault/cluster-secret-store.yaml`
+
+3. **ExternalSecret для API**
+
+   ESO подключён к Vault — теперь создаём описание, какие секреты синхронизировать в какой K8s Secret.
+
+   `ai-document-platform/k8s/vault/external-secret-api.yaml`
+
+4. **Подключение ESO к deployment**
+
+5. **Подключение Stakater Reloader**
+
+   **Stakater Reloader** — оператор, который следит за Secrets и ConfigMaps. Когда Secret меняется:
+   1. Находит все Deployments, которые ссылаются на этот Secret
+   2. Перезапускает их (rollout restart)
+   3. Новые поды стартуют и читают новый Secret
+
+   **Схема обновления секретов:**
+   ```
+   Vault (изменение пароля)
+       ↓
+   ESO (refreshInterval: 1h) обновляет K8s Secret
+       ↓
+   Secret меняется
+       ↓
+   Reloader видит изменение
+       ↓
+   Находит Deployments, которые его используют
+       ↓
+   kubectl rollout restart deployment/...
+       ↓
+   Новые поды с новым env
+   ```
+
+**Установка Reloader:**
+```bash
+helm repo add stakater https://stakater.github.io/stakater-charts
+helm repo update
+
+helm install reloader stakater/reloader \
+    --namespace reloader \
+    --create-namespace \
+    --set reloader.watchGlobally=true
+```
+
+---
+
+**Переход Vault на standalone**
+
+После всего необходимо перевести Vault на standalone.
+
+1. **Инициализация Vault**
+   ```bash
+   kubectl -n vault exec vault-0 -- vault operator init \
+     -key-shares=5 \
+     -key-threshold=3 \
+     -format=json > /tmp/vault-init.json
+   ```
+   Сгенерирован мастер-ключ, его необходимо использовать для распечатывания.
+
+2. **Распечатывание (unseal)**
+
+   Vault при старте всегда запечатан (sealed). Он не может расшифровать свои данные.
+
+   `ai-document-platform/k8s/vault/vault-unseal`
+
+---
+
+- [ ] **Этап 7. Observability**
+- [ ] **Этап 8. KEDA**
+- [ ] **Этап 9. Chaos Engineering**
+- [ ] **Этап 10. CI/CD и GitOps**
+- [ ] **Этап 11. CronJob и финализация**
+
+---
+
 

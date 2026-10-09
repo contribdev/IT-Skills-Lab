@@ -1,0 +1,54 @@
+global:
+  enabled: true
+  tlsDisable: true        # для dev; в prod — TLS
+
+server:
+  # Standalone режим — не HA, но с persistent storage
+  standalone:
+    enabled: true
+    config: |
+      ui = true
+      listener "tcp" {
+        tls_disable = true
+        address     = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+      storage "file" {
+        path = "/vault/data"
+      }
+
+  # Persistence — данные на PVC
+  dataStorage:
+    enabled: true
+    size: 5Gi
+    storageClass: local-path    # k3s default StorageClass
+
+  # Resources
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+  # UI
+  ui:
+    enabled: true
+    serviceType: ClusterIP
+
+  # Отключаем injector — не нужен
+  injector:
+    enabled: false
+
+  # Service — обычный ClusterIP
+  service:
+    enabled: true
+    type: ClusterIP
+
+  # Anti-affinity не нужна для standalone
+  affinity: ""
+
+# Отключаем CSI (не используем)
+csi:
+  enabled: false

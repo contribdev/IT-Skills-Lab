@@ -37,11 +37,6 @@ config:
   DB_POOL_MAX_SIZE: "5"
   DB_COMMAND_TIMEOUT: "60.0"
 
-secrets:
-  DATABASE_URL: ""
-  RABBITMQ_URL: ""
-  S3_ACCESS_KEY: ""
-  S3_SECRET_KEY: ""
 
 imagePullSecrets:
   - name: ghcr-secret

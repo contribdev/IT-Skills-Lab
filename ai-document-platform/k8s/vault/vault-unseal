@@ -1,0 +1,22 @@
+export VAULT_ROOT_TOKEN=$(cat ~/vault-init.json | jq -r '.root_token')
+mapfile -t UNSEAL_KEYS < <(cat ~/vault-init.json | jq -r '.unseal_keys_b64[]')
+
+kubectl -n vault port-forward svc/vault 8200:8200 &
+
+# Unseal
+VAULT_ADDR=http://127.0.0.1:8200
+
+# Ключ 1
+curl -s -X POST -d "{\"key\": \"${UNSEAL_KEYS[0]}\"}" \
+  $VAULT_ADDR/v1/sys/unseal | jq '{sealed, progress, t}'
+
+# Ключ 2
+curl -s -X POST -d "{\"key\": \"${UNSEAL_KEYS[1]}\"}" \
+  $VAULT_ADDR/v1/sys/unseal | jq '{sealed, progress, t}'
+
+# Ключ 3
+curl -s -X POST -d "{\"key\": \"${UNSEAL_KEYS[2]}\"}" \
+  $VAULT_ADDR/v1/sys/unseal | jq '{sealed, progress, t}'
+
+# Проверь
+curl -s http://127.0.0.1:8200/v1/sys/health | jq '{sealed, initialized}'

@@ -4,6 +4,8 @@ metadata:
   name: {{ include "api.fullname" . }}
   labels:
     {{- include "api.labels" . | nindent 4 }}
+  annotations:
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -15,7 +17,6 @@ spec:
         {{- include "api.selectorLabels" . | nindent 8 }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
     spec:
       serviceAccountName: {{ include "api.serviceAccountName" . }}
       {{- with .Values.imagePullSecrets }}
@@ -34,7 +35,7 @@ spec:
             - configMapRef:
                 name: {{ include "api.fullname" . }}
             - secretRef:
-                name: {{ include "api.fullname" . }}
+                name: api-secrets
           livenessProbe:
             httpGet:
               path: /healthz

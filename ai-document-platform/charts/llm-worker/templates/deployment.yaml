@@ -4,6 +4,8 @@ metadata:
   name: {{ include "llm-worker.fullname" . }}
   labels:
     {{- include "llm-worker.labels" . | nindent 4 }}
+  annotations:
+    reloader.stakater.com/auto: "true"    
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -15,7 +17,6 @@ spec:
         {{- include "llm-worker.selectorLabels" . | nindent 8 }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
     spec:
       serviceAccountName: {{ include "llm-worker.serviceAccountName" . }}
       {{- with .Values.imagePullSecrets }}
@@ -34,7 +35,7 @@ spec:
             - configMapRef:
                 name: {{ include "llm-worker.fullname" . }}
             - secretRef:
-                name: {{ include "llm-worker.fullname" . }}
+                name: api-secrets
           livenessProbe:
             httpGet:
               path: /metrics
