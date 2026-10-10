@@ -1,0 +1,20 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy          # кластерная, не namespace'ная
+metadata:
+  name: disallow-privileged-containers
+spec:
+  validationFailureAction: Audit   # не блокировать, только логировать
+  background: true                 # сканировать существующие ресурсы
+  rules:
+    - name: privileged-containers
+      match:
+        any:
+          - resources:
+              kinds: [Pod]         # применяется к подам
+      validate:
+        message: "Privileged mode is disallowed..."
+        pattern:
+          spec:
+            containers:
+              - =(securityContext):
+                  =(privileged): "false"

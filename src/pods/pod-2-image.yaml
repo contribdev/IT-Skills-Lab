@@ -10,13 +10,9 @@ spec:
     name: web-server
     ports:
     - containerPort: 80
-
-  - image: tomcat:8.5.38
-    name: web-api
-    ports:
-    - containerPort: 8080
-
     resources: {}
+    securityContext:
+      privileged: true
   dnsPolicy: ClusterFirst
   restartPolicy: Never
 status: {}

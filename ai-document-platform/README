@@ -722,9 +722,91 @@ helm install reloader stakater/reloader \
 
    `ai-document-platform/k8s/vault/vault-unseal`
 
+Пересмотр плана: на данный момент нет смысла настраивать политики, т.к. на каждом этапе придется иъ менять и имеется большой риск сломать кластер
+
+Разберу на простои примере
+Политика — это правило, которое описывает что можно и что нельзя делать в кластере. Проверка происходит в момент, когда ресурс попадает в API-сервер.
+
+Примеры:
+«Нельзя создавать поды без resources.requests»
+«Нельзя использовать тег :latest»
+«Все поды должны иметь лейблы app, team, env»
+«Нельзя монтировать hostPath»
+
+API-сервер K8s умеет вызывать admission webhooks — внешние сервисы, которые проверяют (и могут мутировать) ресурс до его сохранения в etcd.
+
+kubectl apply → API-сервер → admission webhook → разрешить/запретить → etcd
+                                    │
+                                    ▼
+                          ┌──────────────────┐
+                          │  Policy Engine   │
+                          │ (Kyverno/OPA)    │
+                          └──────────────────┘
+
+     Admission-контроллеры бывают двух видов:
+
+Validating — только разрешить/запретить.
+
+Mutating — могут изменить ресурс (например, автоматически добавить лейбл).
+
+Kyverno умеет и то, и другое.
+
+Ньюанс
+ «Что произойдёт, если Kyverno упадёт?» Правильный ответ: API-сервер не сможет валидировать ресурсы → создание/изменение сломается, если failurePolicy: Fail. Обычно ставят failurePolicy: Ignore для критичных webhook'ов, чтобы не уронить кластер, но тогда политики не работают в момент недоступности.
+
+Kyverno может работать в двух режимах
+
+-Audit	Не блокирует. Пишет нарушение в PolicyReport.	Первое время в кластере — понять масштаб
+-Enforce	Блокирует создание ресурса.	Когда уверен, что ничего не сломается
+
+helm repo add kyverno https://kyverno.github.io/kyverno/
+helm repo update
+
+helm install kyverno kyverno/kyverno \
+  --namespace kyverno \
+  --create-namespace \
+  --version 3.3.4 \
+  --set admissionController.replicas=1 \
+  --set backgroundController.replicas=1 \
+  --set cleanupController.replicas=1 \
+  --set reportsController.replicas=1
+
+admission-controller	Ловит ресурсы в момент создания (это и есть webhook)
+background-controller	Сканирует существующие ресурсы и генерирует отчёты
+reports-controller	Собирает PolicyReport и ClusterPolicyReport
+cleanup-controller	Удаляет ресурсы по TTL (например, старые Job)
+
+«Как Kyverno проверяет поды, которые уже были в кластере до его установки?» Ответ: background-controller периодически обходит существующие ресурсы и валидирует их так же, как это делал бы admission. Результат — в PolicyReport. Именно поэтому в политике есть флаг background: true.
+
+На данном этапе будет реализована простая политика:
+Не разрешать контейнерам securityContext.privileged: true.
+privileged: true даёт контейнеру доступ ко всем устройствам хоста. Это фактически root на ноде.
+
+PolicyReport — это кастомный ресурс Kubernetes, который Kyverno создаёт автоматически. Он содержит результаты проверки ресурсов кластера на соответствие политикам. Важно понимать: отчёты создаются для всех правил — и для прошедших проверку (pass), и для нарушающих (fail)
+
+Попытка создать заведомо невалидный под 
+
+  containers:
+  - image: nginx:1.27.0
+    name: web-server
+    ports:
+    - containerPort: 80
+    resources: {}
+    securityContext:
+      privileged: true
+
+  results:
+  - message: 'validation error: Privileged mode is disallowed... rule privileged-containers
+      failed at path /spec/containers/0/securityContext/privileged/'
+    policy: disallow-privileged-containers
+    result: fail
+  
+
 ---
 
 - [ ] **Этап 7. Observability**
+
+
 - [ ] **Этап 8. KEDA**
 - [ ] **Этап 9. Chaos Engineering**
 - [ ] **Этап 10. CI/CD и GitOps**
