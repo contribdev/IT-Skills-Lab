@@ -806,6 +806,73 @@ PolicyReport — это кастомный ресурс Kubernetes, которы
 
 - [ ] **Этап 7. Observability**
 
+Архитектура сборки метрик
+                ┌──────────────────────┐
+                │     Prometheus       │
+                │  (namespace:         │
+                │   monitoring)        │
+                └──────────┬───────────┘
+                           │ scrape каждые 15s
+        ┌──────────────────┼──────────────────┐
+        ▼                  ▼                  ▼
+   ┌─────────┐       ┌──────────┐       ┌──────────┐
+   │   api   │       │  ocr-    │       │  llm-    │
+   │ :8000   │       │ worker   │       │ worker   │
+   │/metrics │       │ :9090    │       │ :9091    │
+   └─────────┘       └──────────┘       └──────────┘
+        ▲                                    
+        │ HTTPS (снаружи)
+        │
+   ┌─────────┐
+   │  Браузер│
+   │  Windows│
+   └─────────┘ 
+
+Метрики сервисов
+ocr_processed_total{status="success"} 4.0
+ocr_pages_total 4.0
+ocr_errors_total (пусто — ошибок не было)
+ocr_duration_seconds_count 4.0
+ocr_duration_seconds_sum 10.19988...  → avg ≈ 2.55 сек
+ocr_active_jobs 0.0
+
+llm_processed_total{status="success"} 4.0
+llm_errors_total (пусто)
+llm_tokens_total{kind="prompt"} 1672
+llm_tokens_total{kind="completion"} 538
+llm_duration_seconds_count 4.0
+llm_duration_seconds_sum 72.4247...  → avg ≈ 18.1 сек
+llm_ollama_request_seconds_sum 71.53  → avg ≈ 17.9 сек
+llm_active_jobs 0.0
+
+Установка Prometheus
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace \
+  --set prometheus.prometheusSpec.retention=15d \
+  --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage=20Gi \
+  --set alertmanager.alertmanagerSpec.storage.volumeClaimTemplate.spec.resources.requests.storage=5Gi \
+  --set grafana.persistence.enabled=true \
+  --set grafana.persistence.size=5Gi \
+  --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false
+
+ServiceMonitor — CRD (Custom Resource Definition), которая описывает как скрапить метрики с группы подов, найденных через Service.
+
+В Prometheus есть 4 типа метрик. Всё остальное — их комбинации.
+1. Counter (счётчик)
+Что: число, которое только растёт (или сбрасывается в 0 при рестарте процесса).
+2. Gauge (измеритель)
+Что: число, которое может расти и падать — текущее значение.
+Пример: ocr_active_jobs, documents_by_status, process_resident_memory_bytes.
+3. Histogram (гистограмма)
+Что: распределение значений по «корзинам» (buckets). Позволяет считать процентили на стороне Prometheus.
+Пример: http_request_duration_seconds, ocr_duration_seconds, llm_duration_seconds.
+4. Summary (сводка)
+Что: тоже процентили, но считаются на стороне приложения.
+
 
 - [ ] **Этап 8. KEDA**
 - [ ] **Этап 9. Chaos Engineering**

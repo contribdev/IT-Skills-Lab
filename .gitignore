@@ -25,3 +25,4 @@ troubleshooting/
 __init__.py
 __pycache__/
 scripts/
+CLAUDE.md

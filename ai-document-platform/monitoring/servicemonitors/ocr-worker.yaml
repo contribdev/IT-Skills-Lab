@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ocr-worker
+  namespace: ai-doc-platform
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ocr-worker
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s

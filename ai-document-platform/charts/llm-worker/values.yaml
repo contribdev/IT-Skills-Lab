@@ -46,6 +46,10 @@ serviceAccount:
   name: ""
   annotations: {}
 
+metrics:
+  port: 9091
+  enabled: true
+
 nodeSelector: {}
 tolerations: []
 affinity: {}
