@@ -722,19 +722,21 @@ helm install reloader stakater/reloader \
 
    `ai-document-platform/k8s/vault/vault-unseal`
 
-Пересмотр плана: на данный момент нет смысла настраивать политики, т.к. на каждом этапе придется иъ менять и имеется большой риск сломать кластер
+---
 
-Разберу на простои примере
+### Kyverno — политики кластера
+
 Политика — это правило, которое описывает что можно и что нельзя делать в кластере. Проверка происходит в момент, когда ресурс попадает в API-сервер.
 
 Примеры:
-«Нельзя создавать поды без resources.requests»
-«Нельзя использовать тег :latest»
-«Все поды должны иметь лейблы app, team, env»
-«Нельзя монтировать hostPath»
+- «Нельзя создавать поды без resources.requests»
+- «Нельзя использовать тег :latest»
+- «Все поды должны иметь лейблы app, team, env»
+- «Нельзя монтировать hostPath»
 
 API-сервер K8s умеет вызывать admission webhooks — внешние сервисы, которые проверяют (и могут мутировать) ресурс до его сохранения в etcd.
 
+```
 kubectl apply → API-сервер → admission webhook → разрешить/запретить → etcd
                                     │
                                     ▼
@@ -742,23 +744,25 @@ kubectl apply → API-сервер → admission webhook → разрешить/
                           │  Policy Engine   │
                           │ (Kyverno/OPA)    │
                           └──────────────────┘
+```
 
-     Admission-контроллеры бывают двух видов:
-
-Validating — только разрешить/запретить.
-
-Mutating — могут изменить ресурс (например, автоматически добавить лейбл).
+Admission-контроллеры бывают двух видов:
+- **Validating** — только разрешить/запретить
+- **Mutating** — могут изменить ресурс (например, автоматически добавить лейбл)
 
 Kyverno умеет и то, и другое.
 
-Ньюанс
- «Что произойдёт, если Kyverno упадёт?» Правильный ответ: API-сервер не сможет валидировать ресурсы → создание/изменение сломается, если failurePolicy: Fail. Обычно ставят failurePolicy: Ignore для критичных webhook'ов, чтобы не уронить кластер, но тогда политики не работают в момент недоступности.
+> **Нюанс:** «Что произойдёт, если Kyverno упадёт?» Правильный ответ: API-сервер не сможет валидировать ресурсы → создание/изменение сломается, если `failurePolicy: Fail`. Обычно ставят `failurePolicy: Ignore` для критичных webhook'ов, чтобы не уронить кластер, но тогда политики не работают в момент недоступности.
 
-Kyverno может работать в двух режимах
+**Режимы работы Kyverno:**
 
--Audit	Не блокирует. Пишет нарушение в PolicyReport.	Первое время в кластере — понять масштаб
--Enforce	Блокирует создание ресурса.	Когда уверен, что ничего не сломается
+| Режим | Поведение | Когда использовать |
+|-------|-----------|-------------------|
+| Audit | Не блокирует. Пишет нарушение в PolicyReport | Первое время в кластере — понять масштаб |
+| Enforce | Блокирует создание ресурса | Когда уверен, что ничего не сломается |
 
+**Установка Kyverno:**
+```bash
 helm repo add kyverno https://kyverno.github.io/kyverno/
 helm repo update
 
@@ -770,43 +774,55 @@ helm install kyverno kyverno/kyverno \
   --set backgroundController.replicas=1 \
   --set cleanupController.replicas=1 \
   --set reportsController.replicas=1
+```
 
-admission-controller	Ловит ресурсы в момент создания (это и есть webhook)
-background-controller	Сканирует существующие ресурсы и генерирует отчёты
-reports-controller	Собирает PolicyReport и ClusterPolicyReport
-cleanup-controller	Удаляет ресурсы по TTL (например, старые Job)
+**Компоненты Kyverno:**
 
-«Как Kyverno проверяет поды, которые уже были в кластере до его установки?» Ответ: background-controller периодически обходит существующие ресурсы и валидирует их так же, как это делал бы admission. Результат — в PolicyReport. Именно поэтому в политике есть флаг background: true.
+| Компонент | Назначение |
+|-----------|------------|
+| admission-controller | Ловит ресурсы в момент создания (это и есть webhook) |
+| background-controller | Сканирует существующие ресурсы и генерирует отчёты |
+| reports-controller | Собирает PolicyReport и ClusterPolicyReport |
+| cleanup-controller | Удаляет ресурсы по TTL (например, старые Job) |
 
-На данном этапе будет реализована простая политика:
-Не разрешать контейнерам securityContext.privileged: true.
-privileged: true даёт контейнеру доступ ко всем устройствам хоста. Это фактически root на ноде.
+> «Как Kyverno проверяет поды, которые уже были в кластере до его установки?» Ответ: background-controller периодически обходит существующие ресурсы и валидирует их так же, как это делал бы admission. Результат — в PolicyReport. Именно поэтому в политике есть флаг `background: true`.
 
-PolicyReport — это кастомный ресурс Kubernetes, который Kyverno создаёт автоматически. Он содержит результаты проверки ресурсов кластера на соответствие политикам. Важно понимать: отчёты создаются для всех правил — и для прошедших проверку (pass), и для нарушающих (fail)
+**Реализованная политика:**
 
-Попытка создать заведомо невалидный под 
+Не разрешать контейнерам `securityContext.privileged: true`. `privileged: true` даёт контейнеру доступ ко всем устройствам хоста. Это фактически root на ноде.
 
-  containers:
-  - image: nginx:1.27.0
-    name: web-server
-    ports:
-    - containerPort: 80
-    resources: {}
-    securityContext:
-      privileged: true
+> **PolicyReport** — кастомный ресурс Kubernetes, который Kyverno создаёт автоматически. Он содержит результаты проверки ресурсов кластера на соответствие политикам. Важно понимать: отчёты создаются для всех правил — и для прошедших проверку (pass), и для нарушающих (fail).
 
-  results:
-  - message: 'validation error: Privileged mode is disallowed... rule privileged-containers
-      failed at path /spec/containers/0/securityContext/privileged/'
-    policy: disallow-privileged-containers
-    result: fail
+**Попытка создать заведомо невалидный под:**
+
+```yaml
+containers:
+- image: nginx:1.27.0
+  name: web-server
+  ports:
+  - containerPort: 80
+  resources: {}
+  securityContext:
+    privileged: true
+```
+
+**Результат:**
+```yaml
+results:
+- message: 'validation error: Privileged mode is disallowed... rule privileged-containers
+    failed at path /spec/containers/0/securityContext/privileged/'
+  policy: disallow-privileged-containers
+  result: fail
+```
   
 
 ---
 
 - [ ] **Этап 7. Observability**
 
-Архитектура сборки метрик
+**Архитектура сборки метрик:**
+
+```
                 ┌──────────────────────┐
                 │     Prometheus       │
                 │  (namespace:         │
@@ -820,15 +836,19 @@ PolicyReport — это кастомный ресурс Kubernetes, которы
    │ :8000   │       │ worker   │       │ worker   │
    │/metrics │       │ :9090    │       │ :9091    │
    └─────────┘       └──────────┘       └──────────┘
-        ▲                                    
+        ▲
         │ HTTPS (снаружи)
         │
    ┌─────────┐
    │  Браузер│
    │  Windows│
-   └─────────┘ 
+   └─────────┘
+```
 
-Метрики сервисов
+**Метрики сервисов:**
+
+```
+# OCR Worker
 ocr_processed_total{status="success"} 4.0
 ocr_pages_total 4.0
 ocr_errors_total (пусто — ошибок не было)
@@ -836,6 +856,7 @@ ocr_duration_seconds_count 4.0
 ocr_duration_seconds_sum 10.19988...  → avg ≈ 2.55 сек
 ocr_active_jobs 0.0
 
+# LLM Worker
 llm_processed_total{status="success"} 4.0
 llm_errors_total (пусто)
 llm_tokens_total{kind="prompt"} 1672
@@ -844,8 +865,11 @@ llm_duration_seconds_count 4.0
 llm_duration_seconds_sum 72.4247...  → avg ≈ 18.1 сек
 llm_ollama_request_seconds_sum 71.53  → avg ≈ 17.9 сек
 llm_active_jobs 0.0
+```
 
-Установка Prometheus
+**Установка Prometheus:**
+
+```bash
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 
@@ -858,20 +882,198 @@ helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
   --set grafana.persistence.enabled=true \
   --set grafana.persistence.size=5Gi \
   --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false
+```
 
-ServiceMonitor — CRD (Custom Resource Definition), которая описывает как скрапить метрики с группы подов, найденных через Service.
+> **ServiceMonitor** — CRD (Custom Resource Definition), которая описывает как скрапить метрики с группы подов, найденных через Service.
+
+**Типы метрик Prometheus:**
 
 В Prometheus есть 4 типа метрик. Всё остальное — их комбинации.
-1. Counter (счётчик)
-Что: число, которое только растёт (или сбрасывается в 0 при рестарте процесса).
-2. Gauge (измеритель)
-Что: число, которое может расти и падать — текущее значение.
-Пример: ocr_active_jobs, documents_by_status, process_resident_memory_bytes.
-3. Histogram (гистограмма)
-Что: распределение значений по «корзинам» (buckets). Позволяет считать процентили на стороне Prometheus.
-Пример: http_request_duration_seconds, ocr_duration_seconds, llm_duration_seconds.
-4. Summary (сводка)
-Что: тоже процентили, но считаются на стороне приложения.
+
+1. **Counter (счётчик)** — число, которое только растёт (или сбрасывается в 0 при рестарте процесса)
+2. **Gauge (измеритель)** — число, которое может расти и падать — текущее значение. Пример: `ocr_active_jobs`, `documents_by_status`, `process_resident_memory_bytes`
+3. **Histogram (гистограмма)** — распределение значений по «корзинам» (buckets). Позволяет считать процентили на стороне Prometheus. Пример: `http_request_duration_seconds`, `ocr_duration_seconds`, `llm_duration_seconds`
+4. **Summary (сводка)** — тоже процентили, но считаются на стороне приложения
+
+**Принципы построения дашбордов:**
+
+#### 1. Один дашборд — одна цель
+
+Отдельные дашборды под разные вопросы:
+- **Overview** — бизнес-метрики, для быстрого взгляда
+- **API Golden Signals** — технический, для SRE
+- **OCR worker** — глубоко по воркеру
+- **LLM worker** — глубоко по воркеру
+- **SLO** — error budget, burn rate
+
+#### 2. Сверху вниз — от важного к деталям
+
+На каждом дашборде:
+- Верхний ряд — самые важные метрики (Golden Signals / SLI)
+- Ниже — детали (per-endpoint, per-pod)
+- Самый низ — диагностика (логи, traces — если есть)
+
+#### 3. Golden Signals — базовый набор
+
+Четыре сигнала, которые всегда нужны (Google SRE):
+
+| Signal | Что | Пример метрики |
+|--------|-----|----------------|
+| Latency | Как долго | `histogram_quantile(0.95, rate(..._bucket[5m]))` |
+| Traffic | Сколько | `rate(http_requests_total[5m])` |
+| Errors | Ошибки | `rate(http_requests_total{status=~"5.."}[5m])` |
+| Saturation | Загрузка | `process_resident_memory_bytes` |
+
+Для сервисов есть **RED** (Rate, Errors, Duration), для ресурсов — **USE** (Utilization, Saturation, Errors).
+
+#### 4. Правильный тип панели под данные
+
+| Данные | Панель |
+|--------|--------|
+| Временной ряд, изменение | Time series |
+| Одно число сейчас | Stat |
+| Распределение по категориям | Bar chart |
+| Часть от целого | Pie chart (редко) |
+| Топ-N | Bar gauge (horizontal) |
+| Тепловая карта (latency buckets) | Heatmap |
+
+#### 5. Дашборд — для человека, а не для метрик
+
+**Плохие практики:**
+- 20 панелей на одном экране
+- Нет заголовков — «что это вообще?»
+- Легенды без значений — «а какое сейчас число?»
+- Нет thresholds — «красный или зелёный?»
+- Все метрики в одной панели
+
+**Хорошие практики:**
+- 4–8 панелей на экране
+- Понятные заголовки + Description
+- Legend с Last или Max значением
+- Thresholds для цветов (зелёный → красный)
+- Разные панели для разных аспектов
+
+**Сохранение дашборда в Git:**
+
+1. Экспортировать JSON-конфигурацию из Grafana:
+   ```bash
+   curl -s -u admin:$GRAFANA_PASSWORD \
+     "http://localhost:3000/api/dashboards/uid/ads8h8h" \
+     > /tmp/raw-llm-worker.json
+   ```
+
+2. Собрать ConfigMap для Grafana sidecar-контейнера:
+```bash
+# Извлечь дашборд без id/version
+jq '.dashboard | del(.id, .version)' /tmp/raw-llm-worker.json > /tmp/llm-worker.json
+
+# Проверить, что JSON валиден
+jq empty /tmp/llm-worker.json && echo "JSON valid"
+
+# Собрать ConfigMap
+cat > monitoring/grafana-dashboards/llm-worker-configmap.yaml <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-llm-worker
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "AI Platform"
+data:
+  llm-worker.json: |
+$(sed 's/^/      /' /tmp/llm-worker.json)
+EOF
+```
+
+**Overview:**
+
+![Overview Dashboard](src/img/overview.png)
+
+**API Golden Signals:**
+
+![API Golden Signals Dashboard](src/img/api_golden_signals.png)
+
+**LLM Perfomance Dashboard:**
+
+![LLM Perfomance Dashboard](src/img/llm-dashboard.png)
+
+**OCR Perfomance Dashboard:**
+
+![OCR Perfomance Dashboard](src/img/ocr-dashboard.png)
+
+У меня 4 дашборда. Overview — бизнес-метрики: где документы в пайплайне, сколько упавших. API Golden Signals — технический: RPS, latency p50/p95/p99, error ratio, saturation. OCR и LLM — производительность воркеров с разбивкой ошибок по типам. Отдельно выделил duration внешней LLM — 98% времени воркера уходит на Ollama, поэтому оптимизировать надо модель, а не код.
+
+«Что такое Golden Signals?»
+Traffic, Latency, Errors, Saturation — четыре сигнала из Google SRE. Traffic — RPS, Latency — p95/p99 из гистограмм, Errors — доля 5xx (4xx не влияет на SLO), Saturation — CPU/память относительно лимитов. Если любой отклоняется — ищу причину в остальных.
+
+---
+
+### Процентили
+
+Процентили — это статистическая мера распределения, а не среднее.
+
+| Процентиль | Что означает | В графике |
+|------------|--------------|-----------|
+| p50 (медиана) | 50% запросов быстрее этого значения | ≈0 мс — половина отвечает мгновенно |
+| p95 | 95% быстрее, 5% медленнее | ≈340 мс в пике |
+| p99 | 99% быстрее, 1% медленнее | ≈480 мс в пике |
+
+**Почему все три нужны:**
+- **p50** — общая картина. Если растёт — что-то системно тормозит
+- **p95** — «типичные медленные». Часто SLO пишут на p95
+- **p99** — хвост. Ловит редкие задержки: GC паузы, сетевые ретраи, cold start
+
+### Краткие основы PromQL
+
+**Типы данных:**
+
+| Тип | Пример | Что это |
+|-----|--------|---------|
+| Instant vector | `http_requests_total` | Множество series в момент времени |
+| Range vector | `http_requests_total[5m]` | Множество series за интервал |
+| Scalar | `42` | Просто число |
+
+**Основные функции:**
+
+| Функция | Что | Пример |
+|---------|-----|--------|
+| `rate(v[5m])` | Скорость counter | `rate(http_requests_total[5m])` |
+| `increase(v[1h])` | Прирост за час | `increase(documents_uploaded_total[1h])` |
+| `sum(v)` | Сумма | `sum(rate(...))` |
+| `sum by (l) (v)` | С группировкой | `sum by (handler) (rate(...))` |
+| `avg/max/min(v)` | Агрегаты | `max(documents_by_status)` |
+| `topk(N, v)` | Топ-N | `topk(10, rate(...))` |
+| `histogram_quantile(q, v)` | Процентиль | `histogram_quantile(0.95, ..._bucket)` |
+
+**Операторы:**
+
+| Оператор | Что | Пример |
+|----------|-----|--------|
+| `+ - * /` | Арифметика | `a / b` |
+| `==, !=, >, <` | Сравнение | `up == 0` |
+| `or vector(0)` | «Если пусто — 0» | `sum(...) or vector(0)` |
+| `and, or, unless` | Логические | `a and b` |
+
+**Селекторы лейблов:**
+
+| Синтаксис | Что |
+|-----------|-----|
+| `{label="value"}` | Равно |
+| `{label!="value"}` | Не равно |
+| `{label=~"regex"}` | Regex match |
+| `{label!~"regex"}` | Regex не match |
+| `{status=~"5.."}` | 5xx (любые 2 символа после 5) |
+| `{label!~"a\|b"}` | Не a и не b |
+
+**Паттерны для запоминания:**
+- **Доля:** `sum(numerator) / sum(denominator)`
+- **Проценты:** то же, unit `percentunit`
+- **Процентиль:** `histogram_quantile(0.95, sum by (le) (rate(..._bucket[5m])))`
+- **Топ-N:** `topk(10, sum by (label) (rate(...)))`
+- **«Нет данных = 0»:** выражение `or vector(0)`
+
 
 
 - [ ] **Этап 8. KEDA**
