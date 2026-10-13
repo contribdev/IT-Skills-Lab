@@ -1,0 +1,21 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: llm-worker
+  namespace: ai-doc-platform
+spec:
+  scaleTargetRef:
+    name: llm-worker
+  minReplicaCount: 2
+  maxReplicaCount: 3          
+  pollingInterval: 15
+  cooldownPeriod: 120
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: http
+        queueName: llm.queue
+        mode: QueueLength
+        value: "3"             # 1 реплика на 3 сообщения
+      authenticationRef:
+        name: keda-rabbitmq-auth

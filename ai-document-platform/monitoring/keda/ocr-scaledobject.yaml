@@ -1,0 +1,21 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: ocr-worker
+  namespace: ai-doc-platform
+spec:
+  scaleTargetRef:
+    name: ocr-worker
+  minReplicaCount: 2
+  maxReplicaCount: 4
+  pollingInterval: 15          
+  cooldownPeriod: 60
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: http
+        queueName: ocr.queue
+        mode: QueueLength
+        value: "5"             # 1 реплика на каждые 5 сообщений
+      authenticationRef:
+        name: keda-rabbitmq-auth

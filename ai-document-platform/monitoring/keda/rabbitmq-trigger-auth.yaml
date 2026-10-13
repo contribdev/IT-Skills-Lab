@@ -1,0 +1,16 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-rabbitmq-auth
+  namespace: ai-doc-platform
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: rabbitmq-credentials
+      key: management-url
+    - parameter: username
+      name: rabbitmq-credentials
+      key: username
+    - parameter: password
+      name: rabbitmq-credentials
+      key: password

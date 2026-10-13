@@ -1125,6 +1125,50 @@ Burn Rate = (доля ошибок за окно) / (1 − SLO)
 **SLI — что мерю. SLO — какая цель. SLA — что обещал. Error Budget — сколько могу ошибаться. Burn Rate — как быстро ошибаюсь.**
 
 - [ ] **Этап 8. KEDA**
+
+KEDA (Kubernetes Event-Driven Autoscaling) — оператор, который масштабирует поды по внешним событиям, а не по CPU/памяти.
+
+В проекте данным событием будет наполненность очереди rabbit
+
+В ocr.queue скопилось 50 задач → KEDA поднимает OCR-воркеры с 2 до N
+Почему не HPA (встроенный в K8s): HPA масштабирует по CPU. OCR-воркер, ожидающий RabbitMQ, почти не ест CPU → HPA не сработает.
+
+Установка KEDA
+
+helm repo add kedacore https://kedacore.github.io/charts
+helm repo update
+
+helm install keda kedacore/keda \
+  --namespace keda \
+  --create-namespace
+
+Чтобы следить за очередью нужен RabbitMQ Exporter
+
+KEDA не использует Prometheus — он ходит напрямую в Management API RabbitMQ. Значит, TriggerAuthentication должен указывать на RabbitMQ Management API, а не на Prometheus.
+
+Скопирую Secret 
+kubectl -n queue get secret rabbitmq-credentials -o yaml | \
+  sed 's/namespace: queue/namespace: ai-doc-platform/' | \
+  sed '/resourceVersion:/d' | \
+  sed '/uid:/d' | \
+  sed '/creationTimestamp:/d' | \
+  kubectl apply -f -
+
+Необходимо создать TriggerAuthentication и ScaledObject
+
+Нагрузка:
+seq 1 100 | xargs -P 10 -I {} curl -k -s -X POST https://documents.local/documents \
+  -F "file=@/tmp/test.pdf;type=application/pdf" \
+  -o /dev/null
+
+Результат такой нагрузки
+![alt text](src/img/test-keda.png)
+
+При тестировании обратил внимание, что не все запланированные поды поднялись
+Столкнулся с проблемой: insufficient CPU/memory, taints, лимит подов на ноде. Диагностика — describe pod, kubectl top nodes, describe node. Решения: понизить maxReplicaCount в ScaledObject, уменьшить requests в подах, добавить ноды, или использовать cluster-autoscaler. В моём dev-кластере из 3 нод maxReplicaCount OCR = 4, LLM = 3 — подобрано эмпирически под capacity.
+
+После калибровки повторю эксперимент
+
 - [ ] **Этап 9. Chaos Engineering**
 - [ ] **Этап 10. CI/CD и GitOps**
 - [ ] **Этап 11. CronJob и финализация**
