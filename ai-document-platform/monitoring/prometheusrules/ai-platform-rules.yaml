@@ -1,0 +1,152 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ai-doc-platform-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: ai-doc-platform.api
+      interval: 30s
+      rules:
+        # API: высокий error rate (> 5% за 5 минут)
+        - alert: APIHighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{status=~"5..",handler!~"/readyz|/healthz|/metrics"}[5m]))
+              /
+              sum(rate(http_requests_total{handler!~"/readyz|/healthz|/metrics"}[5m]))
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+            service: api
+          annotations:
+            summary: "API 5xx error rate > 5%"
+            description: "5xx доля {{ $value | humanizePercentage }} за последние 5 минут."
+
+        # API: высокая latency (p95 > 1s за 10 мин)
+        - alert: APIHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (
+                rate(http_request_duration_seconds_bucket{handler!~"/readyz|/healthz|/metrics"}[5m])
+              )
+            ) > 1
+          for: 10m
+          labels:
+            severity: warning
+            service: api
+          annotations:
+            summary: "API p95 latency > 1s"
+            description: "p95 {{ $value | humanizeDuration }} — проверь узкое место."
+
+        # API: под недоступен
+        - alert: APIDown
+          expr: up{job="api"} == 0 or absent(up{job="api"})
+          for: 2m
+          labels:
+            severity: critical
+            service: api
+          annotations:
+            summary: "API target DOWN"
+            description: "Prometheus не может скрейпить {{ $labels.instance }} более 2 минут."
+
+    - name: ai-doc-platform.workers
+      interval: 30s
+      rules:
+        # OCR: высокий error rate
+        - alert: OCRHighErrorRate
+          expr: |
+            sum(rate(ocr_errors_total[5m]))
+            /
+            sum(rate(ocr_processed_total[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            service: ocr-worker
+          annotations:
+            summary: "OCR error rate > 5%"
+            description: "Ошибки OCR: {{ $value | humanizePercentage }}."
+
+        # OCR: медленная обработка (p95 > 60s)
+        - alert: OCRSlow
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(ocr_duration_seconds_bucket[5m]))
+            ) > 60
+          for: 10m
+          labels:
+            severity: warning
+            service: ocr-worker
+          annotations:
+            summary: "OCR p95 duration > 60s"
+
+        # LLM: высокий error rate
+        - alert: LLMHighErrorRate
+          expr: |
+            sum(rate(llm_errors_total[5m]))
+            /
+            sum(rate(llm_processed_total[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            service: llm-worker
+          annotations:
+            summary: "LLM error rate > 5%"
+
+        # LLM: медленная обработка (p95 > 90s)
+        - alert: LLMSlow
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(llm_duration_seconds_bucket[5m]))
+            ) > 90
+          for: 10m
+          labels:
+            severity: warning
+            service: llm-worker
+          annotations:
+            summary: "LLM p95 duration > 90s"
+            description: "Проверь Ollama — узкое место обычно там."
+
+        # LLM: активные задачи застряли (jobs > 0 длительное время без движения)
+        - alert: LLMStuckJobs
+          expr: |
+            sum(llm_active_jobs) > 0
+            and
+            rate(llm_processed_total[10m]) == 0
+          for: 10m
+          labels:
+            severity: critical
+            service: llm-worker
+          annotations:
+            summary: "LLM worker: активные задачи, но нет прогресса"
+            description: "Задачи висят, но не завершаются — возможен затык в Ollama."
+
+    - name: ai-doc-platform.pipeline
+      interval: 30s
+      rules:
+        # Pipeline: много упавших документов
+        - alert: HighFailedDocuments
+          expr: max(documents_by_status{status="failed"}) > 10
+          for: 10m
+          labels:
+            severity: warning
+            service: pipeline
+          annotations:
+            summary: "Более 10 упавших документов"
+            description: "Текущее число: {{ $value }}."
+
+        # Pipeline: застой (документы не завершаются)
+        - alert: PipelineStuck
+          expr: |
+            max(documents_by_status{status="uploaded"}) > 20
+            and
+            rate(llm_processed_total[10m]) == 0
+          for: 15m
+          labels:
+            severity: warning
+            service: pipeline
+          annotations:
+            summary: "20+ документов застряли в uploaded"
