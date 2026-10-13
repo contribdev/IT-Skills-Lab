@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq-exporter
+  namespace: queue
+  labels:
+    app: rabbitmq-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq-exporter
+  template:
+    metadata:
+      labels:
+        app: rabbitmq-exporter
+    spec:
+      containers:
+        - name: exporter
+          image: kbudde/rabbitmq-exporter:1.0.0
+          env:
+            - name: RABBIT_URL
+              value: "http://rabbitmq.queue.svc.cluster.local:15672"
+            - name: RABBIT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: username
+            - name: RABBIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: password
+            - name: RABBIT_EXPORTER_PORT
+              value: "9419"
+            - name: RABBIT_CAPABILITIES
+              value: "bert,no_sort"
+            - name: RABBIT_QUEUES
+              value: ".*"
+            - name: RABBIT_INCLUDE_QUEUE_LABELS
+              value: "queue"
+          ports:
+            - name: metrics
+              containerPort: 9419
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-exporter
+  namespace: queue
+  labels:
+    app: rabbitmq-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app: rabbitmq-exporter
+  ports:
+    - name: metrics
+      port: 9419
+      targetPort: 9419
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rabbitmq-exporter
+  namespace: queue
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: rabbitmq-exporter
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
