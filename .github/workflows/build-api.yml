@@ -11,6 +11,10 @@ on:
       - '.github/workflows/build-api.yml'
   workflow_dispatch:
 
+concurrency:
+  group: bump-image-tags
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/ai-document-platform-api
@@ -19,8 +23,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write      # для обновления values.yaml
-      packages: write      # для push в GHCR
+      contents: write
+      packages: write
 
     steps:
       - name: Checkout
@@ -52,7 +56,7 @@ jobs:
         id: build
         uses: docker/build-push-action@v5
         with:
-          context: ./ai-document-platform/apps/ocr-worker
+          context: ./ai-document-platform/apps/api
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -72,8 +76,14 @@ jobs:
           cd ai-document-platform/charts/api
           sed -i "s|tag: .*|tag: \"sha-${SHORT_SHA}\"|" values.yaml
           cd ../..
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add charts/api/values.yaml
           git diff --staged --quiet || git commit -m "chore(api): bump image to sha-${SHORT_SHA} [skip ci]"
-          git push
+
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin main && break
+            echo "Push failed, retry $i/5..."
+            sleep 5
+          done
