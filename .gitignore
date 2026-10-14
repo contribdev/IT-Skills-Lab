@@ -20,7 +20,6 @@ override.tf.json
 .env.local
 .env.*.local
 !.env.example
-uv.lock
 troubleshooting/
 __init__.py
 __pycache__/
