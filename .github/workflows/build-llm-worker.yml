@@ -4,10 +4,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'apps/llm-worker/**'
-      - 'charts/llm-worker/templates/**'
-      - 'charts/llm-worker/Chart.yaml'
-      - 'charts/llm-worker/values.yaml'
+      - 'ai-document-platform/apps/llm-worker/**'
+      - 'ai-document-platform/charts/llm-worker/templates/**'
+      - 'ai-document-platform/charts/llm-worker/Chart.yaml'
+      - 'ai-document-platform/charts/llm-worker/values.yaml'
       - '.github/workflows/build-llm-worker.yml'
   workflow_dispatch:
 

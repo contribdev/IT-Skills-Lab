@@ -4,10 +4,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'apps/ocr-worker/**'
-      - 'charts/ocr-worker/templates/**'
-      - 'charts/ocr-worker/Chart.yaml'
-      - 'charts/ocr-worker/values.yaml'
+      - 'ai-document-platform/apps/ocr-worker/**'
+      - 'ai-document-platform/charts/ocr-worker/templates/**'
+      - 'ai-document-platform/charts/ocr-worker/Chart.yaml'
+      - 'ai-document-platform/charts/ocr-worker/values.yaml'
       - '.github/workflows/build-ocr-worker.yml'
   workflow_dispatch:
 

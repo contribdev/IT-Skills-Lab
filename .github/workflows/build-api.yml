@@ -4,10 +4,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'apps/api/**'
-      - 'charts/api/templates/**'
-      - 'charts/api/Chart.yaml'
-      - 'charts/api/values.yaml'
+      - 'ai-document-platform/apps/api/**'
+      - 'ai-document-platform/charts/api/templates/**'
+      - 'ai-document-platform/charts/api/Chart.yaml'
+      - 'ai-document-platform/charts/api/values.yaml'
       - '.github/workflows/build-api.yml'
   workflow_dispatch:
 
