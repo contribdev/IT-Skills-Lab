@@ -1080,99 +1080,227 @@ Traffic, Latency, Errors, Saturation — четыре сигнала из Google
 - **Топ-N:** `topk(10, sum by (label) (rate(...)))`
 - **«Нет данных = 0»:** выражение `or vector(0)`
 
+```
 SLI  →  SLO  →  SLA
 что      цель     обещание
 мерим   для себя клиенту
+```
 
-сначала измеряем, потом ставим цель, потом обещаем клиенту
+Сначала измеряем, потом ставим цель, потом обещаем клиенту.
 
-1. SLI — Service Level Indicator
+#### 1. SLI — Service Level Indicator
+
 Что это: метрика, которая измеряет качество сервиса.
-SLI = (хорошие события) / (всего событий)
+
+`SLI = (хорошие события) / (всего событий)`
+
 SLI — измеримая величина. Не «сервис работает хорошо», а «доля успешных = 99.7%».
 
-2. SLO — Service Level Objective
-Что это: целевое значение SLI. Внутренняя цель команды.
-Не 100%. 100% недостижимо и дорого. Всегда есть запас на сбои.
-Из SLO следует Error Budget: если SLO 99.5%, бюджет = 0.5% времени/запросов можно «потратить» на сбои.
-Зачем SLO:
--Приоритизация — если бюджет кончился → feature freeze, все силы на стабильность.
--Разговор с бизнесом — «99.9% стоит X, 99.99% стоит 10X».
--Триггер для алертов — не «CPU > 80%», а «error budget burn rate > 10».
+#### 2. SLO — Service Level Objective
 
-3. SLA — Service Level Agreement
+Что это: целевое значение SLI. Внутренняя цель команды.
+
+Не 100%. 100% недостижимо и дорого. Всегда есть запас на сбои.
+
+Из SLO следует Error Budget: если SLO 99.5%, бюджет = 0.5% времени/запросов можно «потратить» на сбои.
+
+**Зачем SLO:**
+- Приоритизация — если бюджет кончился → feature freeze, все силы на стабильность
+- Разговор с бизнесом — «99.9% стоит X, 99.99% стоит 10X»
+- Триггер для алертов — не «CPU > 80%», а «error budget burn rate > 10»
+
+#### 3. SLA — Service Level Agreement
+
 Что это: юридическое обязательство перед клиентом с последствиями.
-Ключевые свойства:
--Публичное обещание. Написано в контракте.
--Есть последствия — штраф, скидка, расторжение.
--SLA всегда слабее SLO. Если SLO 99.9%, SLA — 99.5% (запас на «внутренние проблемы»).
+
+**Ключевые свойства:**
+- Публичное обещание. Написано в контракте
+- Есть последствия — штраф, скидка, расторжение
+- SLA всегда слабее SLO. Если SLO 99.9%, SLA — 99.5% (запас на «внутренние проблемы»)
+
 SLA — обещание клиенту с финансовыми последствиями. Обычно на 0.3-0.5% слабее SLO. Если SLO нарушен — команда напрягается. Если SLA нарушен — компания платит деньги.
 
-4. Error Budget
-Что это: 1 − SLO. Сколько «плохих» событий допустимо.
-Зачем:
--Можно тратить — на деплой, эксперименты, chaos-тесты.
--Кончился бюджет — стоп экспериментам, все силы на надёжность.
--Не кончился — можно рисковать (быстрее выкатывать фичи).
+#### 4. Error Budget
 
-5. Burn Rate
+Что это: `1 − SLO`. Сколько «плохих» событий допустимо.
+
+**Зачем:**
+- Можно тратить — на деплой, эксперименты, chaos-тесты
+- Кончился бюджет — стоп экспериментам, все силы на надёжность
+- Не кончился — можно рисковать (быстрее выкатывать фичи)
+
+#### 5. Burn Rate
+
 Что это: скорость расходования Error Budget.
-Burn Rate = 1 → бюджет израсходуется ровно за SLO-окно (30 дней).
-Burn Rate = 2 → за 15 дней.
+- Burn Rate = 1 → бюджет израсходуется ровно за SLO-окно (30 дней)
+- Burn Rate = 2 → за 15 дней
 
-Burn Rate = (доля ошибок за окно) / (1 − SLO)
+`Burn Rate = (доля ошибок за окно) / (1 − SLO)`
 
-**SLI — что мерю. SLO — какая цель. SLA — что обещал. Error Budget — сколько могу ошибаться. Burn Rate — как быстро ошибаюсь.**
+> **SLI — что мерю. SLO — какая цель. SLA — что обещал. Error Budget — сколько могу ошибаться. Burn Rate — как быстро ошибаюсь.**
 
 - [ ] **Этап 8. KEDA**
 
-KEDA (Kubernetes Event-Driven Autoscaling) — оператор, который масштабирует поды по внешним событиям, а не по CPU/памяти.
+**KEDA** (Kubernetes Event-Driven Autoscaling) — оператор, который масштабирует поды по внешним событиям, а не по CPU/памяти.
 
-В проекте данным событием будет наполненность очереди rabbit
+В проекте данным событием будет наполненность очереди RabbitMQ:
+- В `ocr.queue` скопилось 50 задач → KEDA поднимает OCR-воркеры с 2 до N
+- Почему не HPA (встроенный в K8s): HPA масштабирует по CPU. OCR-воркер, ожидающий RabbitMQ, почти не ест CPU → HPA не сработает
 
-В ocr.queue скопилось 50 задач → KEDA поднимает OCR-воркеры с 2 до N
-Почему не HPA (встроенный в K8s): HPA масштабирует по CPU. OCR-воркер, ожидающий RabbitMQ, почти не ест CPU → HPA не сработает.
+**Установка KEDA:**
 
-Установка KEDA
-
+```bash
 helm repo add kedacore https://kedacore.github.io/charts
 helm repo update
 
 helm install keda kedacore/keda \
   --namespace keda \
   --create-namespace
+```
 
-Чтобы следить за очередью нужен RabbitMQ Exporter
+> KEDA не использует Prometheus — он ходит напрямую в Management API RabbitMQ. Значит, TriggerAuthentication должен указывать на RabbitMQ Management API, а не на Prometheus.
 
-KEDA не использует Prometheus — он ходит напрямую в Management API RabbitMQ. Значит, TriggerAuthentication должен указывать на RabbitMQ Management API, а не на Prometheus.
+**Копирование Secret:**
 
-Скопирую Secret 
+```bash
 kubectl -n queue get secret rabbitmq-credentials -o yaml | \
   sed 's/namespace: queue/namespace: ai-doc-platform/' | \
   sed '/resourceVersion:/d' | \
   sed '/uid:/d' | \
   sed '/creationTimestamp:/d' | \
   kubectl apply -f -
+```
 
-Необходимо создать TriggerAuthentication и ScaledObject
+Необходимо создать TriggerAuthentication и ScaledObject.
 
-Нагрузка:
+**Нагрузочное тестирование:**
+
+```bash
 seq 1 100 | xargs -P 10 -I {} curl -k -s -X POST https://documents.local/documents \
   -F "file=@/tmp/test.pdf;type=application/pdf" \
   -o /dev/null
+```
 
-Результат такой нагрузки
-![alt text](src/img/test-keda.png)
+**Результат нагрузки:**
 
-При тестировании обратил внимание, что не все запланированные поды поднялись
-Столкнулся с проблемой: insufficient CPU/memory, taints, лимит подов на ноде. Диагностика — describe pod, kubectl top nodes, describe node. Решения: понизить maxReplicaCount в ScaledObject, уменьшить requests в подах, добавить ноды, или использовать cluster-autoscaler. В моём dev-кластере из 3 нод maxReplicaCount OCR = 4, LLM = 3 — подобрано эмпирически под capacity.
+![KEDA Test](src/img/test-keda.png)
 
-После калибровки повторю эксперимент
+При тестировании обратил внимание, что не все запланированные поды поднялись. Столкнулся с проблемой: insufficient CPU/memory, taints, лимит подов на ноде.
+
+**Диагностика:** `kubectl describe pod`, `kubectl top nodes`, `kubectl describe node`
+
+**Решения:**
+- Понизить `maxReplicaCount` в ScaledObject
+- Уменьшить `requests` в подах
+- Добавить ноды
+- Использовать cluster-autoscaler
+
+В моём dev-кластере из 3 нод: `maxReplicaCount` OCR = 4, LLM = 3 — подобрано эмпирически под capacity.
+
+После калибровки повторю эксперимент.
 
 - [ ] **Этап 9. Chaos Engineering**
 - [ ] **Этап 10. CI/CD и GitOps**
 - [ ] **Этап 11. CronJob и финализация**
 
+### Troubleshooting: Insufficient CPU
+
+После перезагрузки ПК столкнулся с проблемами:
+- Prometheus работал некорректно, метрики приходили рваные
+- KEDA не мог создать новые поды из-за ошибки `Insufficient CPU`
+
+#### Requests vs Limits
+
+**Requests** — гарантированная доля CPU, которую Kubernetes резервирует для пода на ноде. Scheduler использует requests при выборе ноды: под запустится только там, где сумма requests всех подов + requests нового пода ≤ capacity ноды.
+
+**Limits** — потолок. Kubelet следит за реальным использованием и throttles под, если он превысил limit (для CPU) или убивает (для памяти).
+
+> `сумма requests всех подов на ноде ≤ allocatable ноды`
+
+#### Диагностика ресурсов
+
+```bash
+# Смотрим реальное использование
+kubectl top nodes
+
+# Смотрим requests
+kubectl describe nodes | grep -A5 "Allocated resources" | grep -E "cpu|memory"
+
+# Поиск самых активных потребителей
+kubectl get pods -A -o json | jq -r '
+  .items[] |
+  select(.status.phase=="Running") |
+  "\(.metadata.namespace)/\(.metadata.name): \(.spec.containers[0].resources.requests.cpu // "0")"
+' | sort -t: -k2 -h | tail -20
+```
+
+**Результат диагностики:**
+- `kubectl describe nodes | grep "Allocated resources"`: CPU Requests 97-100%
+- Разбор по namespace:
+  - kyverno: 400m (избыточен для dev)
+  - projectcontour: 400m (3 Envoy)
+  - keda: 300m
+  - storage: 250m
+  - ai-doc-platform: 500m
+  - chaos-mesh: 200m
+  - database: 200m
+  - **итого:** ~3000m requests = 100% capacity 3 нод
+
+#### Единицы измерения ресурсов
+
+| Ресурс | Единица | Пример |
+|--------|---------|--------|
+| CPU | millicores (m) | 100m = 0.1 CPU = 10% одного ядра |
+| CPU | cores | 1 = 1 CPU = 100% одного ядра |
+| Memory | bytes | 256Mi = 256 мебибайт |
+| Memory | bytes | 1Gi = 1 гибибайт |
+
+#### Capacity ноды
+
+**Capacity** — общие ресурсы ноды, которые видит Kubernetes:
+- **CPU:** количество ядер на ноде
+- **Memory:** физическая память минус системные резервы
+
+**Три уровня capacity:**
+
+| Уровень | Что это |
+|---------|---------|
+| Capacity | Всего ресурсов (CPU cores, RAM) |
+| Allocatable | Capacity минус системные резервы (kubelet, kube-proxy, etc.) |
+| Allocated | Requests подов, уже размещённых на ноде |
+
+Scheduler использует Allocatable — не Capacity. Обычно Allocatable = Capacity - небольшая дельта. Для CPU — почти то же. Для памяти — минус ~100-200 MiB.
+
+#### Throttling
+
+**Throttling** — принудительное ограничение использования CPU для пода, если он превышает `limits.cpu`.
+
+**Как работает:**
+1. В Linux есть механизм CFS (Completely Fair Scheduler)
+2. Kubelet настраивает cgroup для каждого контейнера:
+   - `cpu.shares` — пропорция (из requests)
+   - `cpu.cfs_quota_us` / `cpu.cfs_period_us` — потолок (из limits)
+3. Если контейнер за период (обычно 100ms) превысил quota — он замораживается до конца периода
+
+Throttling происходит, когда контейнер превышает `limits.cpu`. Linux CFS ограничивает CPU-время в рамках периода. Это не убивает под (в отличие от OOM), но замедляет. Симптом — рост latency при нормальной нагрузке.
+
+#### Разница между CPU и Memory
+
+| | CPU | Memory |
+|---|-----|--------|
+| Requests | `cpu.shares` — пропорция при contention | OOM score |
+| Limits | `cpu.max` — throttling при превышении | `memory.max` — OOMKill при превышении |
+| При превышении limits | Throttling (процесс замораживается) | Убийство пода (SIGKILL) |
+| Обратимо? | Да, через 100ms | Нет, под перезапускается |
+
+> **CPU — сжимаемый ресурс. Memory — не сжимаемый. Это фундаментальная разница.**
+
+#### Удаление Kyverno
+
+В процессе освобождения ресурсов был удален Kyverno (admission controller).
+
+**Проблема:** Helm удалил Deployment, Service, ServiceAccount — но не удалил `ValidatingWebhookConfiguration` и `MutatingWebhookConfiguration`, что заблокировало кластер для изменений.
+
+**Решение:** сначала нужно удалять хуки, потом сносить оператор.
+
 ---
-
-
