@@ -43,3 +43,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:9090/metrics')" || exit 1
 
 CMD ["python", "-m", "ocr_worker.main"]
+
+# test comment
