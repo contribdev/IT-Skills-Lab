@@ -177,3 +177,4 @@ jobs:
           git add ai-document-platform/charts/*/values.yaml
           git diff --staged --quiet && echo "No changes to commit" && exit 0
           git commit -m "chore: bump image tags to ${TAG} [skip ci]"
+          git push
