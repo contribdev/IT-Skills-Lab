@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1                                                                                                                                                                      
+kind: AppProject                                                                                                                                                                                      
+metadata:                                                                                                                                                                                             
+  name: platform                                                                                                                                                                                      
+  namespace: argocd                                                                                                                                                                                   
+spec:                                                                                                                                                                                                 
+  description: Infrastructure components                                                                                                                                                              
+                                                                                                                                                                                                      
+  sourceRepos:                                                                                                                                                                                        
+    - 'https://charts.jetstack.io'                                                                                                                                                                    
+    - 'https://kedacore.github.io/charts'                                                                                                                                                             
+    - 'https://projectcontour.github.io/helm-charts/'                                                                                                                                                 
+    - 'https://charts.external-secrets.io'                                                                                                                                                            
+    - 'https://prometheus-community.github.io/helm-charts'                                                                                                                                            
+    - 'https://stakater.github.io/stakater-charts'                                                                                                                                                    
+    - 'https://helm.releases.hashicorp.com'                                                                                                                                                           
+    - 'https://github.com/contribdev/IT-Skills-Lab'                                                                                                                                                   
+                                                                                                                                                                                                      
+  destinations:                                                                                                                                                                                       
+    - namespace: '*'                                                                                                                                                                                  
+      server: https://kubernetes.default.svc                                                                                                                                                          
+                                                                                                                                                                                                      
+  clusterResourceWhitelist:                                                                                                                                                                           
+    - group: '*'                                                                                                                                                                                      
+      kind: '*'

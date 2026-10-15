@@ -1,0 +1,13 @@
+USER-SUPPLIED VALUES:
+contour:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+envoy:
+  hostPorts:
+    enable: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi

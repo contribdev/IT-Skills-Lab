@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-apps                                        
+  namespace: argocd                                          
+spec:                                                        
+  generators:                                                
+    - git:                                                   
+        repoURL: https://github.com/contribdev/IT-Skills-Lab 
+        revision: main                                       
+        directories:                                         
+          - path: ai-document-platform/charts/*              
+                                                              
+  template:                                                  
+    metadata:                                                
+      name: '{{path.basename}}'                                                   
+    spec:                                                    
+      project: default                                       
+                                                              
+      source:                                                
+        repoURL: https://github.com/contribdev/IT-Skills-Lab 
+        targetRevision: main                                 
+        path: '{{path}}'                         
+                                                              
+      destination:                                           
+        server: https://kubernetes.default.svc               
+        namespace: ai-doc-platform                           
+                                                              
+      syncPolicy:                                            
+        automated:                                           
+          prune: true                                        
+          selfHeal: true                                     
+        syncOptions:                                         
+          - CreateNamespace=true 

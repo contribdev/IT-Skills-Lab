@@ -1,0 +1,39 @@
+USER-SUPPLIED VALUES:
+csi:
+  enabled: false
+global:
+  enabled: true
+  tlsDisable: true
+server:
+  affinity: ""
+  dataStorage:
+    enabled: true
+    size: 5Gi
+    storageClass: local-path
+  injector:
+    enabled: false
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  service:
+    enabled: true
+    type: ClusterIP
+  standalone:
+    config: |
+      ui = true
+      listener "tcp" {
+        tls_disable = true
+        address     = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+      storage "file" {
+        path = "/vault/data"
+      }
+    enabled: true
+  ui:
+    enabled: true
+    serviceType: ClusterIP

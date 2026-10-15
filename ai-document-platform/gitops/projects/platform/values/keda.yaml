@@ -1,0 +1,11 @@
+USER-SUPPLIED VALUES:
+resources:
+  metricServer:
+    requests:
+      cpu: 50m
+  operator:
+    requests:
+      cpu: 50m
+  webhook:
+    requests:
+      cpu: 50m

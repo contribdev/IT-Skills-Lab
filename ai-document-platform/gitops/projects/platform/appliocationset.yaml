@@ -1,0 +1,68 @@
+apiVersion: argoproj.io/v1alpha1                                                                                                                                                                      
+kind: ApplicationSet                                                                                                                                                                                  
+metadata:                                                                                                                                                                                             
+  name: platform                                                                                                                                                                                      
+  namespace: argocd                                                                                                                                                                                   
+spec:                                                                                                                                                                                                 
+  generators:                                                                                                                                                                                         
+    - list:                                                                                                                                                                                           
+        elements:                                                                                                                                                                                     
+          - name: cert-manager                                                                                                                                                                        
+            repoURL: https://charts.jetstack.io                                                                                                                                                       
+            chart: cert-manager                                                                                                                                                                       
+            version: v1.21.2                                                                                                                                                                          
+            namespace: cert-manager                                                                                                                                                                   
+          - name: keda                                                                                                                                                                                
+            repoURL: https://kedacore.github.io/charts                                                                                                                                                
+            chart: keda                                                                                                                                                                               
+            version: 2.21.0                                                                                                                                                                           
+            namespace: keda                                                                                                                                                                           
+          - name: contour                                                                                                                                                                             
+            repoURL: https://projectcontour.github.io/helm-charts/                                                                                                                                    
+            chart: contour                                                                                                                                                                            
+            version: "0.8.0"                                                                                                                                                                          
+            namespace: projectcontour                                                                                                                                                                 
+          - name: external-secrets                                                                                                                                                                    
+            repoURL: https://charts.external-secrets.io                                                                                                                                               
+            chart: external-secrets                                                                                                                                                                   
+            version: 2.12.0                                                                                                                                                                           
+            namespace: external-secrets                                                                                                                                                               
+          - name: kube-prometheus-stack                                                                                                                                                               
+            repoURL: https://prometheus-community.github.io/helm-charts                                                                                                                               
+            chart: kube-prometheus-stack                                                                                                                                                              
+            version: 92.3.0                                                                                                                                                                           
+            namespace: monitoring                                                                                                                                                                     
+          - name: reloader                                                                                                                                                                            
+            repoURL: https://stakater.github.io/stakater-charts                                                                                                                                       
+            chart: reloader                                                                                                                                                                           
+            version: 2.2.18                                                                                                                                                                           
+            namespace: reloader                                                                                                                                                                       
+          - name: vault                                                                                                                                                                               
+            repoURL: https://helm.releases.hashicorp.com                                                                                                                                              
+            chart: vault                                                                                                                                                                              
+            version: 0.34.1                                                                                                                                                                           
+            namespace: vault                                                                                                                                                                          
+                                                                                                                                                                                                      
+  template:                                                                                                                                                                                           
+    metadata:                                                                                                                                                                                         
+      name: '{{name}}'                                                                                                                                                                                
+    spec:                                                                                                                                                                                             
+      project: platform                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+      sources:                                                                                                                                                                                        
+        - repoURL: '{{repoURL}}'                                                                                                                                                                      
+          chart: '{{chart}}'                                                                                                                                                                          
+          targetRevision: '{{version}}'                                                                                                                                                               
+          helm:                                                                                                                                                                                       
+            valueFiles:                                                                                                                                                                               
+              - $values/ai-document-platform/gitops/projects/platform/values/{{name}}.yaml                                                                                                                     
+        - repoURL: https://github.com/contribdev/IT-Skills-Lab                                                                                                                                        
+          targetRevision: main                                                                                                                                                                        
+          ref: values                                                                                                                                                                                 
+                                                                                                                                                                                                      
+      destination:                                                                                                                                                                                    
+        server: https://kubernetes.default.svc                                                                                                                                                        
+        namespace: '{{namespace}}'                                                                                                                                                                    
+                                                                                                                                                                                                      
+      syncPolicy:                                                                                                                                                                                     
+        syncOptions:                                                                                                                                                                                  
+          - CreateNamespace=true    
