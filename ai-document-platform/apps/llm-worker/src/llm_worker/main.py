@@ -27,8 +27,7 @@ from llm_worker.ollama import (
     OllamaError,
     OllamaHTTPError,
     OllamaInvalidJSONError,
-    OllamaTimeoutError,
-    
+    OllamaTimeoutError,    
     check_ollama,
     generate_json,
 )
