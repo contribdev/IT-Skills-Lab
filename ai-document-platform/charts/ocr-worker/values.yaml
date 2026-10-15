@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/contribdev/ai-document-platform-ocr-worker
-  tag: "sha-0bcb0c4"
+  tag: "sha-6ba6688"
   pullPolicy: IfNotPresent
 
 replicaCount: 2
