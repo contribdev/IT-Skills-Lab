@@ -1200,30 +1200,134 @@ seq 1 100 | xargs -P 10 -I {} curl -k -s -X POST https://documents.local/documen
 После калибровки повторю эксперимент.
 
 - [ ] **Этап 9. Chaos Engineering**
-- [ ] **Этап 10. CI/CD и GitOps**
+- [x] **Этап 10. CI/CD и GitOps**
 
-Столкнулся с проблемой
-buildx failed with: ERROR: failed to build: failed to solve: failed to push ghcr.io/contribdev/ai-document-platform-api:main: denied: permission_denied: read_package
+### GitOps: концепция
 
-Четыре принципа OpenGitOps:
+**GitOps** — Git как единственный источник правды. Любое изменение инфраструктуры через Git, не `kubectl edit`.
 
-1. **Декларативность** — вся система описана декларативно.
-2. **Версионирование и неизменяемость** — описание хранится в git, история полная.
-3. **Автоматическое применение** — агент подтягивает изменения сам.
-4. **Непрерывная сверка** — агент постоянно сравнивает фактическое состояние с желаемым и исправляет расхождения.
+| Модель | Схема | Описание |
+|--------|-------|----------|
+| **Push** (было) | Ты → `helm upgrade` → Кластер | Человек инициирует изменение |
+| **Pull** (стало) | Git ← ArgoCD → Кластер | Агент сам подтягивает изменения |
 
-Архитектура ArgoCD
+### Четыре принципа OpenGitOps
+
+1. **Декларативность** — вся система описана декларативно
+2. **Версионирование и неизменяемость** — описание хранится в Git, история полная
+3. **Автоматическое применение** — агент подтягивает изменения сам
+4. **Непрерывная сверка** — агент постоянно сравнивает фактическое состояние с желаемым и исправляет расхождения (drift)
+
+### CI/CD Pipeline
+
+```
+git push (apps/ или charts/)
+        │
+        ▼
+GitHub Actions (build-and-push-all)
+        │  • build 3 образов
+        │  • push в GHCR
+        │  • bump tags в charts/*/values.yaml
+        ▼
+git commit + push [skip ci]
+        │
+        ▼
+ArgoCD (poll каждые 3 мин или webhook)
+        │
+        ▼
+Helm diff → apply в кластер
+        │
+        ▼
+Новые поды с новыми образами
+```
+
+### Архитектура ArgoCD
 
 | Компонент | Ответственность |
-|---|---|
+|-----------|-----------------|
 | **api-server** | gRPC/REST API, веб-UI, аутентификация, RBAC |
-| **repo-server** | клонирует git, рендерит манифесты (helm template, kustomize build), кеширует результат |
-| **application-controller** | сравнивает желаемое (из repo-server) с фактическим (из кластера), применяет изменения |
-| **redis** | кеш |
-| **dex** (опционально) | интеграция с SSO |
+| **repo-server** | Клонирует Git, рендерит манифесты (helm template, kustomize build), кеширует результат |
+| **application-controller** | Сравнивает желаемое (из repo-server) с фактическим (из кластера), применяет изменения |
+| **redis** | Кеш |
+| **dex** (опционально) | Интеграция с SSO |
 
+### Ключевые ресурсы ArgoCD
 
+| Ресурс | Назначение |
+|--------|-----------|
+| **Application** | Что деплоить и куда (один чарт/манифест) |
+| **ApplicationSet** | Генератор Applications из шаблона (DRY) |
+| **AppProject** | Группировка + ограничения доступа (RBAC) |
 
+### Sync Waves — порядок установки
+
+```yaml
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"  # первым (можно отрицательные)
+    argocd.argoproj.io/sync-wave: "0"   # потом
+    argocd.argoproj.io/sync-wave: "1"   # последним
+```
+
+Типичный порядок: Namespace → Operators/CRDs → Applications
+
+### Multi-source Applications
+
+Чарт из внешнего Helm repo, values из своего Git:
+
+```yaml
+sources:
+  - repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    helm:
+      valueFiles:
+        - $values/gitops/platform/values/cert-manager.yaml
+  - repoURL: https://github.com/my/repo
+    ref: values    # ← имя для ссылки $values
+```
+
+### Полезные syncOptions
+
+```yaml
+syncPolicy:
+  automated:
+    prune: true           # удалять ресурсы, которых нет в Git
+    selfHeal: true        # откатывать ручные изменения (drift)
+  syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true  # для больших CRD (избегает ошибки 262KB)
+```
+
+### Структура GitOps в проекте
+
+```
+gitops/
+├── projects/
+│   ├── platform/
+│   │   ├── project.yaml          # AppProject
+│   │   ├── applicationset.yaml   # cert-manager, keda, contour, etc.
+│   │   └── values/               # Helm values для каждого
+│   └── apps/
+│       └── applicationset.yaml   # api, ocr-worker, llm-worker
+```
+
+**Git Directory Generator** — автоматически создаёт Application для каждой папки в `charts/*`.
+
+### Результат
+
+![Result project structure](src/img/project_structure.png)
+
+Работа KEDA отображается в ArgoCD:
+
+![LLM KEDA Scaling](src/img/llm_keda_scaling.png)
+
+### Troubleshooting
+
+**Проблема:** `buildx failed with: ERROR: denied: permission_denied: read_package`
+
+**Причина:** Недостаточно прав для push в GHCR
+
+**Решение:** Проверить `permissions` в workflow и настройки пакета в GitHub
 
 - [ ] **Этап 11. CronJob и финализация**
 
